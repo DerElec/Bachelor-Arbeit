@@ -1,0 +1,112 @@
+import numpy as np
+from scipy.integrate import solve_ivp
+from matplotlib import pyplot as plt 
+import time 
+
+def time_trac(function):
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()  # Start der Zeitmessung
+        result = function(*args, **kwargs)  # Funktion ausführen
+        end_time = time.perf_counter()  # Ende der Zeitmessung
+        elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
+        print(f"Die Ausführungsdauer von '{function.__name__}' betrug: {elapsed_time:.4f} Sekunden ")
+        return result
+    return wrapper
+
+
+
+
+
+delta_1=0.2 #detuning first excited state to cavity
+delta_2=0.2 #detuning second excited state to laser 
+
+
+gamma = 0.05   # Kopplungskonstante
+Omega = 0.2  # Rabi-Frequenz
+V = 0.2       # Wechselwirkung zwischen den |2> Zuständen
+kappa = 0.2    # Dämpfung für den Photon-Operator a
+Gamma = 0.05    # Dämpfung für die Zustandsübergänge
+T=50 #Zeitdauer
+
+#Anfangsbedingungen
+a0= 0.0+0j
+ket00 = 0.0 + 0j
+ket11 = 1 + 0j
+ket22 = 0.0 + 0j
+ket20 = 0.0 + 0j
+ket02 = 0.0 + 0j
+ket10 = 0.0 + 0j
+ket01 = 0.0 + 0j
+ket21=0.0+0j
+ket12=0.0+0j
+
+def dydt(t, y):
+    # Zerlegung der Zustandsvariablen
+    a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
+
+    #Differentialgleichungen für die Mittelwerte der Operatoren
+    da_dt = -kappa/2 *a - 1j * gamma * ket01
+    #da_dagger_dt = -kappa/2 * a_dagger + 1j * gamma * ket10
+    da_dagger_dt =np.conj(da_dt)
+    
+    dket00_dt = +Gamma * ket11 + 1j * gamma * (ket10 * a - ket01 * a_dagger)
+    
+    dket01_dt = -Gamma/2 * ket01 + 1j * (- delta_1 * ket01 + gamma * (ket11 * a - ket00 * a) - Omega/2 * ket02)
+    #dket10_dt = -Gamma/2 * ket10 - 1j * (- (omega_1 - omega_c) * ket10 + gamma * (ket11_k * a_dagger - ket00 * a) - Omega/2 * ket20)
+    dket10_dt =np.conj(dket01_dt)
+    
+    dket11_dt = -Gamma * ket11 + 1j * gamma * (ket01 * a_dagger - ket10 * a) + 1j * Omega/2 * (ket21 - ket12)
+    dket22_dt = 1j * Omega / 2 * (ket12 - ket21)
+    
+    dket21_dt = -Gamma/2 * ket21 + 1j * (delta_2 * ket21 - delta_1 * ket21 - gamma * ket20 * a + Omega/2 * (ket11 - ket22) + 2*V * ket21*ket22)
+    dket12_dt = np.conj(dket21_dt)
+    
+    dket20_dt= delta_2*ket20+Omega/2*ket10+2*V*ket20*ket22-gamma *ket21 *a_dagger
+    dket02_dt=np.conj(dket20_dt)
+    
+    
+    #print("dket01_dt:", dket01_dt)
+    #print("dket01_dt:", dket01_dt, "ket01:", ket01, "Gamma term:", -Gamma/2 * ket01, "Interaction term:", 1j * gamma * (ket11_k * a - ket00 * a))
+    return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt,dket20_dt,dket02_dt]
+
+
+t_eval = np.linspace(0, T, 10000)  
+y0 = [a0, np.conj(a0), ket00, ket01, ket10, ket11, ket22, ket21, ket12,ket20,ket02]  # Anfangsbedingungen, vereinfachte Anfangszustände für Nicht-Diagonalelemente
+
+#@time_trac
+def solver(y0):
+    sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval, method='RK45', rtol=1e-12, atol=1e-15)
+    return sol
+sol=solver(y0)
+
+#a
+# plt.plot(sol.t, abs(sol.y[0]), label='a')
+# plt.plot(sol.t, abs(sol.y[1]), label='a^dagger')
+
+#übergänge
+# plt.plot(sol.t, abs(sol.y[3]), label='<0|1>')
+# plt.plot(sol.t, abs(sol.y[4]), label='<1|0>')
+# plt.plot(sol.t, abs(sol.y[7]), label='<2|1>')
+# plt.plot(sol.t, abs(sol.y[8]), label='<1|2>')
+# plt.plot(sol.t, abs(sol.y[9]), label='<2|0>')
+# plt.plot(sol.t, abs(sol.y[10]), label='<0|2>')
+
+#adjoint zustände 
+plt.plot(sol.t, abs(sol.y[2]), label='<0|0>')
+plt.plot(sol.t, abs(sol.y[5]), label='<1|1>')
+plt.plot(sol.t, abs(sol.y[6]), label='<2|2>')
+
+
+
+plt.plot(sol.t, abs(sol.y[2])+abs(sol.y[5])+abs(sol.y[6])
+           #+abs(sol.y[0])+abs(sol.y[1])+abs(sol.y[3])+abs(sol.y[4])+abs(sol.y[7])+abs(sol.y[8])
+           #-abs(sol.y[0])-abs(sol.y[1])-abs(sol.y[3])-abs(sol.y[4])-abs(sol.y[7])-abs(sol.y[8])
+            ,label='sum of 3 self ')
+
+
+
+plt.xlabel('Time')
+plt.ylabel('Value')
+plt.legend()
+plt.title('Dynamic of the Expectation value of the operators')
+plt.show()

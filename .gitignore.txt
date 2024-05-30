@@ -1,0 +1,6 @@
+*.exe
+*.msi
+*.bin
+*.InstallerID
+old/
+*.x64
