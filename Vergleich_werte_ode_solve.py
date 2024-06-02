@@ -1,12 +1,14 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Jun  1 12:54:49 2024
+
+@author: holli
+"""
+
 import numpy as np
 from scipy.integrate import solve_ivp
 from matplotlib import pyplot as plt 
-<<<<<<< HEAD
-import time
-import pandas as pd
-=======
 import time 
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
 
 def time_trac(function):
     def wrapper(*args, **kwargs):
@@ -18,23 +20,13 @@ def time_trac(function):
         return result
     return wrapper
 
-<<<<<<< HEAD
-results = []
-results_full = []
-for lt in np.arange(-1,0,1):
-#for V in np.arange(-3,0,0.00099):
-    V=-1
+
+
+for lt in np.arange(-300,-299.5,0.5):
+    V=-0.45
     # Parameter for dgl
     print(V)
-    kappa = 2 #cavity loss rate0
-=======
-
-
-for lk in np.arange(0,0.5,0.5):
-    V=-0.4
-    # Parameter for dgl
     kappa = 2 #cavity loss rate
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
     gamma = 1 #rate from cavity and atom coupling
     Gamma = 2 #Decay rate from first excited state to ground
     Omega = 2 #Laser atom coupling constant
@@ -44,11 +36,7 @@ for lk in np.arange(0,0.5,0.5):
     #V = 0.2 #Atom-Atom coupling constant
     # V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
     #V=-50
-<<<<<<< HEAD
-    T=5000
-=======
-    T=10000
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
+    T=1000
      #Time 
     
     ########################################
@@ -61,10 +49,10 @@ for lk in np.arange(0,0.5,0.5):
         return c_1,c_2
         
     c_1,c_2= get_constants(kappa,gamma,Omega,eta)
-<<<<<<< HEAD
+    
     #Random testing
-    # a0= 0
-    # a_dagger_0=0
+    # a0= 2*eta/kappa+0j
+    # a_dagger_0=2*eta/kappa+0j
     # psi00 = 0
     # psi11 = 0.0 + 0j
     # psi22 = 1
@@ -74,35 +62,8 @@ for lk in np.arange(0,0.5,0.5):
     # psi01 = 0.0 + 0j
     # psi21=0.0+0j
     # psi12=0.0+0j
-    ##################################################
-    #Random testing
-    # a0= 2*eta/kappa+0j
-    # a_dagger_0=2*eta/kappa+0j
-    # psi00 = 0
-    # psi11 = 0.0 + 0j
-    # psi22 = 1
-    # psi20 = -Omega*kappa*delta_2/(8*eta*gamma*V)
-    # psi02 = 4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1)
-=======
-    
-    #print(c_1**2+c_2**2)
-    # a0= 2*eta/kappa+0j
-    # a_dagger_0=2*eta/kappa+0j
-    # psi00 = abs(c_1*1)**2 + 0j
-    # psi11 = 0.0 + 0j
-    # psi22 = abs(c_2*1)**2 + 0j
-    # psi20 = -kappa*Omega*abs(c_2)**2/(4*eta*gamma) + 0j
-    # psi02 = -4*gamma*eta*abs(c_1*1)**2/(kappa*Omega) + 0j
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
-    # psi10 = 0.0 + 0j
-    # psi01 = 0.0 + 0j
-    # psi21=0.0+0j
-    # psi12=0.0+0j
     ####################################
-<<<<<<< HEAD
     #Stationary state
-=======
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
     a0= -2*eta/kappa+0j
     a_dagger_0=-2*eta/kappa+0j
     psi00 = delta_2/(2*V)+1
@@ -142,9 +103,6 @@ for lk in np.arange(0,0.5,0.5):
         dket02_dt= 1j*(-delta_2*ket02-Omega/2*ket01-2*V*ket02*ket22+gamma *ket12 *a)
         dket20_dt=np.conj(dket02_dt)
         
-<<<<<<< HEAD
-
-=======
         # print("da_dt:", da_dt)
         # print("dadagger_dt:", da_dagger_dt)
         # print("dket01_dt:", dket01_dt)
@@ -157,7 +115,6 @@ for lk in np.arange(0,0.5,0.5):
         # if dket22_dt>0.1:
         #     print("stop")
         #     return 
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
         return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt,dket20_dt,dket02_dt]
     
     
@@ -166,7 +123,6 @@ for lk in np.arange(0,0.5,0.5):
     
     #@time_trac
     def solver(y0):
-<<<<<<< HEAD
         # sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
         #                 , method='RK45', rtol=1e-12, atol=1e-15)
         sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
@@ -174,17 +130,6 @@ for lk in np.arange(0,0.5,0.5):
         return sol
     sol=solver(y0)
 
-=======
-        sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
-                        , method='RK45', rtol=1e-12, atol=1e-15)
-        return sol
-    sol=solver(y0)
-    
-    #a
-                #+abs(sol.y[0])+abs(sol.y[1])+abs(sol.y[3])+abs(sol.y[4])+abs(sol.y[7])+abs(sol.y[8])
-                #-abs(sol.y[0])-abs(sol.y[1])-abs(sol.y[3])-abs(sol.y[4])-abs(sol.y[7])-abs(sol.y[8])
-                # ,label='sum of 3 self ')
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
     
     
     # plt.plot(sol.t, abs(sol.y[0]), label='a')
@@ -202,48 +147,13 @@ for lk in np.arange(0,0.5,0.5):
     plt.plot(sol.t, sol.y[2], label='<0|0>')
     plt.plot(sol.t, sol.y[5], label='<1|1>')
     plt.plot(sol.t, sol.y[6], label='<2|2>')
-<<<<<<< HEAD
-    # print(sol.y[2][0],sol.y[5][0],sol.y[6][0])
-    # print(sol.y[2][-1],sol.y[5][-1],sol.y[6][-1])
+    print(sol.y[2][0],sol.y[5][0],sol.y[6][0])
     
-    ######################################
+    
     plt.plot(sol.t, sol.y[2]+sol.y[5]+sol.y[6])
-    
     
     plt.xlabel('Time in arbitrary units')
     plt.ylabel('Value of expectation value')
     plt.legend()
     plt.title(f'Dynamic of the Expectation value of the operators for V={V}')
     plt.show()
-    ########################
-    # Save the initial and final values
-    final_values = [sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]]
-    final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
-    results.append([V] + final_values)
-    results_full.append([V] + final_values_full)
-    
-df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
-df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
-# Save to Excel
-df.to_excel('results.xsl')
-df_full.to_pickle('results_full_.xsl')
-df.to_pickle('results.pkl')
-df_full.to_pickle('results_full.pkl')
-#print(df_full.head())
-
-
-    
-    
-    
-=======
-    
-    
-    
-    plt.plot(sol.t, sol.y[2]+sol.y[5]+sol.y[6])
-    
-    plt.xlabel('Time in arbitrary units')
-    plt.ylabel('Value of expectation value')
-    plt.legend()
-    plt.title('Dynamic of the Expectation value of the operators')
-    plt.show()
->>>>>>> 7f695764ea33e04819c3e04db9dc76af61a1e227
