@@ -4,21 +4,34 @@ from matplotlib import pyplot as plt
 import time
 import pandas as pd
 
-def time_trac(function):
+# def time_trac(function):
+#     def wrapper(*args, **kwargs):
+#         start_time = time.perf_counter()  # Start der Zeitmessung
+#         result = function(*args, **kwargs)  # Funktion ausführen
+#         end_time = time.perf_counter()  # Ende der Zeitmessung
+#         elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
+#         print(f"Die Ausführungsdauer von '{function.__name__}' betrug: {elapsed_time:.4f} Sekunden ")
+#         return result
+#     return wrapper
+def time_wrapper(func):
     def wrapper(*args, **kwargs):
         start_time = time.perf_counter()  # Start der Zeitmessung
-        result = function(*args, **kwargs)  # Funktion ausführen
+        result = func(*args, **kwargs)  # Funktion ausführen
         end_time = time.perf_counter()  # Ende der Zeitmessung
         elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
-        print(f"Die Ausführungsdauer von '{function.__name__}' betrug: {elapsed_time:.4f} Sekunden ")
+        
+        # Speichern der Zeit in einer .txt Datei
+        with open('execution_times.txt', 'a') as file:
+            file.write(f"Die Ausführungsdauer von '{func.__name__}' betrug: {elapsed_time:.4f} Sekunden\n")
+        
         return result
     return wrapper
 
 results = []
 results_full = []
-for lt in np.arange(-1,0,1):
-#for V in np.arange(-3,0,0.00099):
-    V=-1
+#for lt in np.arange(-1,0,1):
+for V in np.arange(-3/2,-1,0.02):
+    #V=-1.255
     # Parameter for dgl
     print(V)
     kappa = 2 #cavity loss rate0
@@ -85,7 +98,8 @@ for lt in np.arange(-1,0,1):
     
     
     print(psi00+psi11+psi22)
-    
+    #@time_trac
+    #@time_wrapper
     def dydt(t, y):
         # Zerlegung der Zustandsvariablen
         a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
@@ -117,7 +131,7 @@ for lt in np.arange(-1,0,1):
     t_eval = np.linspace(0, T, 10000)  
     y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12,psi20,psi02]  # Anfangsbedingungen, vereinfachte Anfangszustände für Nicht-Diagonalelemente
     
-    #@time_trac
+    #@time_wrapper
     def solver(y0):
         # sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
         #                 , method='RK45', rtol=1e-12, atol=1e-15)
@@ -165,11 +179,13 @@ for lt in np.arange(-1,0,1):
 df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
 df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
 # Save to Excel
-df.to_excel('results.xsl')
-df_full.to_pickle('results_full_.xsl')
+df.to_excel('results.xlsx', index=False, engine='openpyxl')
+df_full.to_excel('results_full.xlsx', index=False, engine='openpyxl')
+# Save to Pickle
 df.to_pickle('results.pkl')
 df_full.to_pickle('results_full.pkl')
-#print(df_full.head())
+
+print("DataFrames wurden erfolgreich gespeichert.")
 
 
     

@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 
 
 # # Load the Excel file
-df = pd.read_excel('results.xlsx')
-df_full = pd.read_excel('results_full.xlsx')
+df = pd.read_excel('results.xlsx', engine='openpyxl')
+#df_full = pd.read_excel('results_full.xlsx')
 #df = pd.read_pickle('results.pkl')
 # Plot the data
 df=df.astype(complex)
