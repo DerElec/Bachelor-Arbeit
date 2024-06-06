@@ -29,22 +29,28 @@ def time_wrapper(func):
 
 results = []
 results_full = []
+#
 #for lt in np.arange(-1,0,1):
-for V in np.arange(-3/2,-1,0.02):
-    #V=-1.255
+for Omega in np.arange(2,8,0.125):
+    
     # Parameter for dgl
-    print(V)
-    kappa = 2 #cavity loss rate0
+    
+    kappa = 1 #cavity loss rate0
     gamma = 1 #rate from cavity and atom coupling
     Gamma = 2 #Decay rate from first excited state to ground
-    Omega = 2 #Laser atom coupling constant
+    #Omega = 3 #Laser atom coupling constant
+    #Omega = 1.5 #Laser atom coupling constant
     delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
-    delta_2 = 1 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
-    eta=2
+    delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
+    eta=1
+    
     #V = 0.2 #Atom-Atom coupling constant
     # V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
-    #V=-50
-    T=5000
+    
+    V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
+    print(V)
+    print(Omega)
+    T=200
      #Time 
     
     ########################################
@@ -83,18 +89,34 @@ for V in np.arange(-3/2,-1,0.02):
     # psi21=0.0+0j
     # psi12=0.0+0j
     ####################################
-    #Stationary state
+    #Stationary state# perturbed
+    # eps=0.05
+    # other=1-eps
+    # a0= -2*eta/kappa+0j
+    # a_dagger_0=-2*eta/kappa+0j
+    # psi00 = other*(delta_2/(2*V)+1)+eps/2
+    # psi11 = 0 +0j
+    # psi22 = -other*delta_2/(2*V)+eps/2
+    # psi20 = other*(-Omega*kappa*delta_2/(8*eta*gamma*V))
+    # psi02 = other*(4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
+    # psi10 = 0.0 + 0j
+    # psi01 = 0.0 + 0j
+    # psi21=0.0+0j
+    # psi12=0.0+0j
+    #####################################
+    #Stationary state# unperturbed
     a0= -2*eta/kappa+0j
     a_dagger_0=-2*eta/kappa+0j
-    psi00 = delta_2/(2*V)+1
+    psi00 = (delta_2/(2*V)+1)
     psi11 = 0 +0j
     psi22 = -delta_2/(2*V)
-    psi20 = -Omega*kappa*delta_2/(8*eta*gamma*V)
-    psi02 = 4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1)
+    psi20 = (-Omega*kappa*delta_2/(8*eta*gamma*V))
+    psi02 = (4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
     psi10 = 0.0 + 0j
     psi01 = 0.0 + 0j
     psi21=0.0+0j
     psi12=0.0+0j
+    print(psi20,psi02)
     
     
     print(psi00+psi11+psi22)
@@ -175,6 +197,7 @@ for V in np.arange(-3/2,-1,0.02):
     final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
     results.append([V] + final_values)
     results_full.append([V] + final_values_full)
+    print([sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]])
     
 df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
 df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
