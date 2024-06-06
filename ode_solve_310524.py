@@ -5,36 +5,68 @@ import time
 import pandas as pd
 import tracing as tr
 import sympy as sp
-from multiprocessing import Pool
+# def time_trac(function):
+#     def wrapper(*args, **kwargs):
+#         start_time = time.perf_counter()  # Start der Zeitmessung
+#         result = function(*args, **kwargs)  # Funktion ausführen
+#         end_time = time.perf_counter()  # Ende der Zeitmessung
+#         elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
+#         print(f"Die Ausführungsdauer von '{function.__name__}' betrug: {elapsed_time:.4f} Sekunden ")
+#         return result
+#     return wrapper
+start_time = time.time()
+def time_wrapper(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()  # Start der Zeitmessung
+        result = func(*args, **kwargs)  # Funktion ausführen
+        end_time = time.perf_counter()  # Ende der Zeitmessung
+        elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
+        
+        # Speichern der Zeit in einer .txt Datei
+        with open('execution_times.txt', 'a') as file:
+            file.write(f"Die Ausführungsdauer von '{func.__name__}' betrug: {elapsed_time:.4f} Sekunden\n")
+        
+        return result
+    return wrapper
 
-
-
-def compute(Omega):
-    # Parameter für DGL
+results = []
+results_full = []
+#
+for lt in np.arange(-1,0,1):
+#for Omega in np.arange(-2,10,0.5):
+    
+    # Parameter for dgl
     
     kappa = 1 #cavity loss rate0
     gamma = 1 #rate from cavity and atom coupling
     Gamma = 2 #Decay rate from first excited state to ground
-
+    #Omega = 2 #Laser atom coupling constant
+    Omega = 1.5 #Laser atom coupling constant
     delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
     delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
     eta=1
-
+    
+    #V = 0.2 #Atom-Atom coupling constant
+    # V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
+    
+    #V=-3.25
     V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
     print(V)
     print(Omega)
     T=2000
      #Time 
-
-    # stationärer Zustand
-    def get_constants(kappa, gamma, Omega, eta):
-        c_1 = (-Omega * kappa) / (4 * eta * gamma) * np.sqrt(1 / ((Omega**2 * kappa**2) / (16 * eta**2 * gamma**2) + 1))
-        c_2 = np.sqrt(1 - c_1 * np.conj(c_1))
-        return c_1, c_2
-
-    c_1, c_2 = get_constants(kappa, gamma, Omega, eta)
-
-     #Random testing
+    
+    ########################################
+    #stationary state 
+    def get_constants(kappa,gamma,Omega,eta):
+        #c_2 = 1 / np.sqrt((Omega**2 * kappa**2) / (16 * eta**2 * gamma**2 ) + 1)
+        
+        c_1 = (-Omega * kappa) / (4 * eta *  gamma) * np.sqrt(1 / ((Omega**2 * kappa**2) / (16 * eta**2 * gamma**2 ) + 1))
+        c_2=np.sqrt(1-c_1*np.conj(c_1))
+        return c_1,c_2
+        
+    c_1,c_2= get_constants(kappa,gamma,Omega,eta)
+    #Random testing
     a0= 0
     a_dagger_0=0
     psi00 = 0
@@ -91,6 +123,11 @@ def compute(Omega):
     #print(psi20,psi02)
     # Define the elements of the density matrix rho
 
+    
+    
+    #print(psi00+psi11+psi22)
+    #@time_trac
+    #@time_wrapper
     def dydt(t, y):
         # Zerlegung der Zustandsvariablen
         a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
@@ -119,47 +156,81 @@ def compute(Omega):
         return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt,dket20_dt,dket02_dt]
     
     
-
-    t_eval = np.linspace(0, T, 10000)
-    y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12, psi20, psi02]
-
-    sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval, method='DOP853', rtol=1e-13, atol=1e-16)
+    t_eval = np.linspace(0, T, 10000)  
+    y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12,psi20,psi02]  # Anfangsbedingungen, vereinfachte Anfangszustände für Nicht-Diagonalelemente
     
+    #@time_wrapper
+    def solver(y0):
+        # sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
+        #                 , method='RK45', rtol=1e-12, atol=1e-15)
+        sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
+                        , method='DOP853', rtol=1e-13, atol=1e-16)
+        return sol
+    sol=solver(y0)
+
+    
+    
+    # plt.plot(sol.t, abs(sol.y[0]), label='a')
+    # plt.plot(sol.t, abs(sol.y[1]), label='a^dagger')
+    
+    # #übergänge
+    # plt.plot(sol.t, abs(sol.y[3]), label='<0|1>')
+    # plt.plot(sol.t, abs(sol.y[4]), label='<1|0>')
+    # plt.plot(sol.t, abs(sol.y[7]), label='<2|1>')
+    # plt.plot(sol.t, abs(sol.y[8]), label='<1|2>')
+    # plt.plot(sol.t, abs(sol.y[9]), label='<2|0>')
+    # plt.plot(sol.t, abs(sol.y[10]), label='<0|2>')
+    
+    #adjoint zustände 
+    plt.plot(sol.t, sol.y[2], label='<0|0>')
+    plt.plot(sol.t, sol.y[5], label='<1|1>')
+    plt.plot(sol.t, sol.y[6], label='<2|2>')
+    # print(sol.y[2][0],sol.y[5][0],sol.y[6][0])
+    # print(sol.y[2][-1],sol.y[5][-1],sol.y[6][-1])
+    
+    ######################################
+    plt.plot(sol.t, sol.y[2]+sol.y[5]+sol.y[6])
+    
+    
+    plt.xlabel('Time in arbitrary units')
+    plt.ylabel('Value of expectation value')
+    plt.legend()
+    plt.title(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1,delta_2}')
+
+    delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
+    delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
+    eta=1
+    plt.show()
+    ########################
+    # Save the initial and final values
     final_values = [sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]]
     final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
-    result = [V] + final_values
-    result_full = [V] + final_values_full
+    results.append([V] + final_values)
+    results_full.append([V] + final_values_full)
+    #print([sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]])
+   
     
-    rho_unstationary = sp.Matrix([
-        [sol.y[6][-1], sol.y[7][-1], sol.y[9][-1]],
-        [sol.y[8][-1], sol.y[5][-1], sol.y[4][-1]],
-        [sol.y[10][-1], sol.y[3][-1], sol.y[2][-1]]
+   
+    rho_unstationary=sp.Matrix([
+        [sol.y[6][-1] ,sol.y[7][-1] , sol.y[9][-1] ],
+        [sol.y[8][-1], sol.y[5][-1],sol.y[4][-1] ],
+        [sol.y[10][-1], sol.y[3][-1],sol.y[2][-1] ]
     ])
-    trace, eigenvals = tr.get_trace_eigenvals(rho_unstationary)
+    trace,eigenvals=tr.get_trace_eigenvals(rho_unstationary)
     for i in eigenvals:
-        if sp.re(i) < 0:
+        if sp.re(i)<0:
             print(f"problematic, eigenvalue is {i}")
-    print(f"Purity is {trace}")
+    print(f"Purity is {trace}") 
     
-    return result, result_full
-# Multiprocessing zur Berechnung der Ergebnisse
-if __name__ == '__main__':
-    with Pool(processes=4) as pool:  # Anzahl der Prozesse angeben
-        Omega_values = np.arange(-2, 10, 0.25)
-        results = pool.map(compute, Omega_values)
-
-    # Ergebnisse trennen
-    results, results_full = zip(*results)
-    
-    # Daten in DataFrames speichern
-    df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
-    df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
-
-    # Ergebnisse speichern
-    df.to_excel('results.xlsx', index=False, engine='openpyxl')
-    df_full.to_excel('results_full.xlsx', index=False, engine='openpyxl')
-    df.to_pickle('results.pkl')
-    df_full.to_pickle('results_full.pkl')
-    
-    
-    
+df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
+df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
+# Save to Excel
+#df.to_excel('results.xlsx', index=False, engine='openpyxl')
+#df_full.to_excel('results_full.xlsx', index=False, engine='openpyxl')
+# Save to Pickle
+df.to_pickle('results.pkl')
+df_full.to_pickle('results_full.pkl')
+end_time = time.time()
+elapsed_time = end_time - start_time  # Laufzeit berechnen
+print(f"Die Laufzeit der main-Funktion beträgt: {elapsed_time} Sekunden")
+#print("DataFrames wurden erfolgreich gespeichert.")

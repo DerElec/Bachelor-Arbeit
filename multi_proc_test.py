@@ -26,6 +26,7 @@ def compute(Omega):
     delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
     delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
     eta=1
+    values=[kappa,gamma,Gamma,delta_1,delta_2,eta]
 
     V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
     print(V)
@@ -135,7 +136,7 @@ def compute(Omega):
     final_values = [sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]]
     final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
     result = [V] + final_values
-    result_full = [V] + final_values_full
+    
     
     rho_unstationary = sp.Matrix([
         [sol.y[6][-1], sol.y[7][-1], sol.y[9][-1]],
@@ -147,12 +148,14 @@ def compute(Omega):
         if sp.re(i) < 0:
             print(f"problematic, eigenvalue is {i}")
     print(f"Purity is {trace}")
+    result_full = [V] + final_values_full+[eigenvals]+[trace]+[values]
     
     return result, result_full
 # Multiprocessing zur Berechnung der Ergebnisse
 if __name__ == '__main__':
-    with Pool(processes=4) as pool:  # Anzahl der Prozesse angeben
-        Omega_values = np.arange(-2, 10, 0.25)
+    start_time = time.time()
+    with Pool(processes=24) as pool:  # Anzahl der Prozesse angeben
+        Omega_values = np.arange(-2, 15, 0.001)
         results = pool.map(compute, Omega_values)
 
     # Ergebnisse trennen
@@ -160,13 +163,17 @@ if __name__ == '__main__':
     
     # Daten in DataFrames speichern
     df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
-    df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
+    df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>','eigenvals','purity','additional params'])
 
     # Ergebnisse speichern
     df.to_excel('results.xlsx', index=False, engine='openpyxl')
-    df_full.to_excel('results_full.xlsx', index=False, engine='openpyxl')
-    df.to_pickle('results.pkl')
+
+
     df_full.to_pickle('results_full.pkl')
+    end_time = time.time()
+    elapsed_time = end_time - start_time  # Laufzeit berechnen
+    print(f"Die Laufzeit der main-Funktion beträgt: {elapsed_time} Sekunden")
+    
     
     
     
