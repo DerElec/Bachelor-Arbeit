@@ -22,7 +22,7 @@ df=df.drop(df['<2|2>'].idxmax())
 plt.plot(df['V'], df['<0|0>'], label='<0|0>', marker='o')
 plt.plot(df['V'], df['<1|1>'], label='<1|1>', marker='x')
 plt.plot(df['V'], df['<2|2>'], label='<2|2>', marker='s')
-plt.axvline(x=-0.5, color='red', linestyle='--', label='x = -0.5')
+#plt.axvline(x=-0.5, color='red', linestyle='--', label='x = -0.5')
 
 plt.xlabel('V')
 plt.ylabel('Expectation Values')

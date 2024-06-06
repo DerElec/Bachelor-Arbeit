@@ -3,7 +3,8 @@ from scipy.integrate import solve_ivp
 from matplotlib import pyplot as plt 
 import time
 import pandas as pd
-
+import tracing as tr
+import sympy as sp
 # def time_trac(function):
 #     def wrapper(*args, **kwargs):
 #         start_time = time.perf_counter()  # Start der Zeitmessung
@@ -31,14 +32,14 @@ results = []
 results_full = []
 #
 #for lt in np.arange(-1,0,1):
-for Omega in np.arange(2,8,0.125):
+for Omega in np.arange(-2,10,0.25):
     
     # Parameter for dgl
     
     kappa = 1 #cavity loss rate0
     gamma = 1 #rate from cavity and atom coupling
     Gamma = 2 #Decay rate from first excited state to ground
-    #Omega = 3 #Laser atom coupling constant
+    #Omega = 2 #Laser atom coupling constant
     #Omega = 1.5 #Laser atom coupling constant
     delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
     delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
@@ -47,10 +48,11 @@ for Omega in np.arange(2,8,0.125):
     #V = 0.2 #Atom-Atom coupling constant
     # V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
     
+    #V=-3.25
     V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
     print(V)
     print(Omega)
-    T=200
+    T=2000
      #Time 
     
     ########################################
@@ -64,17 +66,17 @@ for Omega in np.arange(2,8,0.125):
         
     c_1,c_2= get_constants(kappa,gamma,Omega,eta)
     #Random testing
-    # a0= 0
-    # a_dagger_0=0
-    # psi00 = 0
-    # psi11 = 0.0 + 0j
-    # psi22 = 1
-    # psi20 = 0
-    # psi02 = 0
-    # psi10 = 0.0 + 0j
-    # psi01 = 0.0 + 0j
-    # psi21=0.0+0j
-    # psi12=0.0+0j
+    a0= 0
+    a_dagger_0=0
+    psi00 = 0
+    psi11 = 0.0 + 0j
+    psi22 = 1
+    psi20 = 0
+    psi02 = 0
+    psi10 = 0.0 + 0j
+    psi01 = 0.0 + 0j
+    psi21=0.0+0j
+    psi12=0.0+0j
     ##################################################
     #Random testing
     # a0= 2*eta/kappa+0j
@@ -98,28 +100,31 @@ for Omega in np.arange(2,8,0.125):
     # psi11 = 0 +0j
     # psi22 = -other*delta_2/(2*V)+eps/2
     # psi20 = other*(-Omega*kappa*delta_2/(8*eta*gamma*V))
-    # psi02 = other*(4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
+    # psi02 = np.conj(psi20)
+    # #other*(4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
     # psi10 = 0.0 + 0j
     # psi01 = 0.0 + 0j
     # psi21=0.0+0j
     # psi12=0.0+0j
     #####################################
     #Stationary state# unperturbed
-    a0= -2*eta/kappa+0j
-    a_dagger_0=-2*eta/kappa+0j
-    psi00 = (delta_2/(2*V)+1)
-    psi11 = 0 +0j
-    psi22 = -delta_2/(2*V)
-    psi20 = (-Omega*kappa*delta_2/(8*eta*gamma*V))
-    psi02 = (4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
-    psi10 = 0.0 + 0j
-    psi01 = 0.0 + 0j
-    psi21=0.0+0j
-    psi12=0.0+0j
-    print(psi20,psi02)
+    # a0= -2*eta/kappa+0j
+    # a_dagger_0=-2*eta/kappa+0j
+    # psi00 = (delta_2/(2*V)+1)
+    # psi11 = 0 +0j
+    # psi22 = -delta_2/(2*V)
+    # psi20 = (-Omega*kappa*delta_2/(8*eta*gamma*V))
+    # psi02 = (4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
+    # psi10 = 0.0 + 0j
+    # psi01 = 0.0 + 0j
+    # psi21=0.0+0j
+    # psi12=0.0+0j
+    #print(psi20,psi02)
+    # Define the elements of the density matrix rho
+
     
     
-    print(psi00+psi11+psi22)
+    #print(psi00+psi11+psi22)
     #@time_trac
     #@time_wrapper
     def dydt(t, y):
@@ -127,7 +132,7 @@ for Omega in np.arange(2,8,0.125):
         a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
     
         #Differentialgleichungen für die Mittelwerte der Operatoren
-        da_dt = -kappa/2 *a - 1j*( gamma * ket01)-eta
+        da_dt = -kappa/2 *a - 1j*( gamma * ket01)+eta
         #da_dagger_dt = -kappa/2 * a_dagger + 1j * gamma * ket10
         da_dagger_dt =np.conj(da_dt)
         
@@ -189,7 +194,11 @@ for Omega in np.arange(2,8,0.125):
     plt.xlabel('Time in arbitrary units')
     plt.ylabel('Value of expectation value')
     plt.legend()
-    plt.title(f'Dynamic of the Expectation value of the operators for V={V}')
+    plt.title(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1,delta_2}')
+
+    delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
+    delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
+    eta=1
     plt.show()
     ########################
     # Save the initial and final values
@@ -197,7 +206,20 @@ for Omega in np.arange(2,8,0.125):
     final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
     results.append([V] + final_values)
     results_full.append([V] + final_values_full)
-    print([sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]])
+    #print([sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]])
+   
+    
+   
+    rho_unstationary=sp.Matrix([
+        [sol.y[6][-1] ,sol.y[7][-1] , sol.y[9][-1] ],
+        [sol.y[8][-1], sol.y[5][-1],sol.y[4][-1] ],
+        [sol.y[10][-1], sol.y[3][-1],sol.y[2][-1] ]
+    ])
+    trace,eigenvals=tr.get_trace_eigenvals(rho_unstationary)
+    for i in eigenvals:
+        if sp.re(i)<0:
+            print(f"problematic, eigenvalue is {i}")
+    print(f"Purity is {trace}") 
     
 df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
 df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
@@ -208,7 +230,7 @@ df_full.to_excel('results_full.xlsx', index=False, engine='openpyxl')
 df.to_pickle('results.pkl')
 df_full.to_pickle('results_full.pkl')
 
-print("DataFrames wurden erfolgreich gespeichert.")
+#print("DataFrames wurden erfolgreich gespeichert.")
 
 
     
