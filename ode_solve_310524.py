@@ -5,6 +5,7 @@ import time
 import pandas as pd
 import tracing as tr
 import sympy as sp
+import os
 # def time_trac(function):
 #     def wrapper(*args, **kwargs):
 #         start_time = time.perf_counter()  # Start der Zeitmessung
@@ -32,8 +33,8 @@ def time_wrapper(func):
 results = []
 results_full = []
 #
-for lt in np.arange(-1,0,1):
-#for Omega in np.arange(-2,10,0.5):
+#for lt in np.arange(-1,0,1):
+for Omega in np.arange(1,11,0.5):
     
     # Parameter for dgl
     
@@ -41,16 +42,16 @@ for lt in np.arange(-1,0,1):
     gamma = 1 #rate from cavity and atom coupling
     Gamma = 2 #Decay rate from first excited state to ground
     #Omega = 2 #Laser atom coupling constant
-    Omega = 1.5 #Laser atom coupling constant
+    #Omega = 2 #Laser atom coupling constant
     delta_1 = 1 #Detuning between first excited state and cavity-Pump detuning
-    delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
+    delta_2 = 1.5 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
     eta=1
     
     #V = 0.2 #Atom-Atom coupling constant
-    # V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
-    
+    V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
+    vals=[kappa,gamma,Gamma,Omega,delta_1,delta_2,eta,V]
     #V=-3.25
-    V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
+    #V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
     print(V)
     print(Omega)
     T=2000
@@ -78,6 +79,7 @@ for lt in np.arange(-1,0,1):
     psi01 = 0.0 + 0j
     psi21=0.0+0j
     psi12=0.0+0j
+    startcond=[a0,a_dagger_0,psi00,psi11,psi22,psi10,psi01,psi21,psi12,psi20,psi02]
     ##################################################
     #Random testing
     # a0= 2*eta/kappa+0j
@@ -206,7 +208,7 @@ for lt in np.arange(-1,0,1):
     final_values = [sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]]
     final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
     results.append([V] + final_values)
-    results_full.append([V] + final_values_full)
+    
     #print([sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]])
    
     
@@ -218,18 +220,81 @@ for lt in np.arange(-1,0,1):
     ])
     trace,eigenvals=tr.get_trace_eigenvals(rho_unstationary)
     for i in eigenvals:
-        if sp.re(i)<0:
+        if sp.re(i)<-np.e**(-12):
+            break
             print(f"problematic, eigenvalue is {i}")
     print(f"Purity is {trace}") 
     
-df = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
-df_full = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
+    
+    
+    ##################################################################################
+    #Averiging results
+    Averiging_rate=50
+    zero_vals = sol.y[2][-Averiging_rate:]
+    one_vals=sol.y[5][-Averiging_rate:]
+    two_vals=sol.y[6][-Averiging_rate:]
+    integral_00 = np.trapz(zero_vals, dx=Averiging_rate)/Averiging_rate
+    integral_11 = np.trapz(one_vals, dx=Averiging_rate)/Averiging_rate
+    integral_22 = np.trapz(two_vals, dx=Averiging_rate)/Averiging_rate
+    
+    averaged_vals=[integral_00 ,integral_11 ,integral_22]
+    
+    ##################################################################################
+    #Calculating variance
+    zero_integrand=(zero_vals-integral_00)**2
+    one_integrand=(one_vals-integral_11)**2
+    two_integrand=(two_vals-integral_22)**2
+    
+    
+    var_00 = np.trapz(zero_integrand, dx=Averiging_rate)/Averiging_rate
+    var_11 = np.trapz(zero_integrand, dx=Averiging_rate)/Averiging_rate
+    var_22 = np.trapz(zero_integrand, dx=Averiging_rate)/Averiging_rate
+    
+    variances=[var_00,var_11,var_22]
+    
+    ##################################################################################
+    
+    results_full.append([V] +averaged_vals #final_values_full
+                        +[eigenvals]+[trace]+[vals]+[startcond]+[variances])
+    
+df_new = pd.DataFrame(results, columns=['V', '<0|0>', '<1|1>', '<2|2>'])
+df_full_new = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>','eigenvals','purity','additional params','startcond','Variances'])
 # Save to Excel
-#df.to_excel('results.xlsx', index=False, engine='openpyxl')
-#df_full.to_excel('results_full.xlsx', index=False, engine='openpyxl')
-# Save to Pickle
-df.to_pickle('results.pkl')
-df_full.to_pickle('results_full.pkl')
+
+
+# Check if the file exists
+if os.path.exists('results_3.pkl'):
+    df_existing = pd.read_pickle('results_3.pkl')
+    df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+else:
+    df_combined = df_new
+
+if os.path.exists('results_full_3.pkl'):
+    df_full_existing = pd.read_pickle('results_full_3.pkl')
+    df_full_combined = pd.concat([df_full_existing, df_full_new], ignore_index=True)
+else:
+    df_full_combined = df_full_new
+
+# Save the combined DataFrames
+df_combined.to_pickle('results_3.pkl')
+df_full_combined.to_pickle('results_full_3.pkl')
+
+
+
+
+
+# df.to_excel('results_3.xlsx', index=False, engine='openpyxl')
+
+# df_full.to_pickle('results_full_3.pkl')
+
+
+
+
+
+
+
+
+
 end_time = time.time()
 elapsed_time = end_time - start_time  # Laufzeit berechnen
 print(f"Die Laufzeit der main-Funktion beträgt: {elapsed_time} Sekunden")

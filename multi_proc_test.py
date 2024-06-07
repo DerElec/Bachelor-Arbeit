@@ -14,7 +14,7 @@ import tracing as tr
 import sympy as sp
 from multiprocessing import Pool
 
-
+#results_full = []
 
 def compute(Omega):
     # Parameter für DGL
@@ -54,6 +54,7 @@ def compute(Omega):
     psi01 = 0.0 + 0j
     psi21=0.0+0j
     psi12=0.0+0j
+    
     ##################################################
     #Random testing
     # a0= 2*eta/kappa+0j
@@ -98,7 +99,7 @@ def compute(Omega):
     # psi12=0.0+0j
     #print(psi20,psi02)
     # Define the elements of the density matrix rho
-
+    startcond=[a0,a_dagger_0,psi00,psi11,psi22,psi10,psi01,psi21,psi12,psi20,psi02]
     def dydt(t, y):
         # Zerlegung der Zustandsvariablen
         a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
@@ -148,14 +149,14 @@ def compute(Omega):
         if sp.re(i) < 0:
             print(f"problematic, eigenvalue is {i}")
     print(f"Purity is {trace}")
-    result_full = [V] + final_values_full+[eigenvals]+[trace]+[values]
+    result_full = [V] + final_values_full+[eigenvals]+[trace]+[values]+[startcond]
     
     return result, result_full
 # Multiprocessing zur Berechnung der Ergebnisse
 if __name__ == '__main__':
     start_time = time.time()
-    with Pool(processes=24) as pool:  # Anzahl der Prozesse angeben
-        Omega_values = np.arange(-2, 15, 0.001)
+    with Pool(processes=8) as pool:  # Anzahl der Prozesse angeben
+        Omega_values = np.arange(-2, 15, 0.1)
         results = pool.map(compute, Omega_values)
 
     # Ergebnisse trennen
