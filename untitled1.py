@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 
 # # Load the Excel file
-df = pd.read_excel('results_1.xlsx', engine='openpyxl')
+df = pd.read_pickle('results_3.pkl')
 #df_full = pd.read_excel('results_full.xlsx')
 #df = pd.read_pickle('results.pkl')
 # Plot the data
@@ -19,9 +19,9 @@ plt.figure(figsize=(10, 6))
 df=df.drop(df['<0|0>'].idxmax())
 df=df.drop(df['<2|2>'].idxmax())
 
-plt.plot(df['V'], df['<0|0>'], label='<0|0>', marker='o')
-plt.plot(df['V'], df['<1|1>'], label='<1|1>', marker='x')
-plt.plot(df['V'], df['<2|2>'], label='<2|2>', marker='s')
+#plt.plot(df['V'], df['<0|0>'], label='<0|0>', marker='o', linestyle='None')
+#plt.plot(df['V'], df['<1|1>'], label='<1|1>', marker='x', linestyle='None')
+plt.plot(df['V'], df['<2|2>'], label='<2|2>', marker='s', linestyle='None')
 #plt.axvline(x=-0.5, color='red', linestyle='--', label='x = -0.5')
 
 plt.xlabel('V')
