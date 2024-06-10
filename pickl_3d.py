@@ -5,7 +5,7 @@ import sympy as sp
 import numpy as np
 import seaborn as sns
 # Lade die Daten aus der .pkl Datei
-df_full = pd.read_pickle(r"C:\Users\hphha\Desktop\BA Stuff\Bachelor-Arbeit\results_full_3.pkl")
+df_full = pd.read_pickle("results_full_3.pkl")
 
 # Wähle die zu plottenden Datenpunkte aus
 V = df_full['V'].to_numpy()

@@ -6,15 +6,44 @@ import pandas as pd
 import tracing as tr
 import sympy as sp
 import os
-# def time_trac(function):
-#     def wrapper(*args, **kwargs):
-#         start_time = time.perf_counter()  # Start der Zeitmessung
-#         result = function(*args, **kwargs)  # Funktion ausführen
-#         end_time = time.perf_counter()  # Ende der Zeitmessung
-#         elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
-#         print(f"Die Ausführungsdauer von '{function.__name__}' betrug: {elapsed_time:.4f} Sekunden ")
-#         return result
-#     return wrapper
+
+
+
+
+
+def dydt(t, y):
+            # Zerlegung der Zustandsvariablen
+            a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
+        
+            #Differentialgleichungen für die Mittelwerte der Operatoren
+            da_dt = -kappa/2 *a - 1j*( gamma * ket01)+eta
+            #da_dagger_dt = -kappa/2 * a_dagger + 1j * gamma * ket10
+            da_dagger_dt =np.conj(da_dt)
+            
+            dket00_dt = +Gamma * ket11 + 1j * gamma * (ket10 * a - ket01 * a_dagger)
+            
+            dket01_dt = -Gamma/2 * ket01 + 1j * (-delta_1 * ket01 + gamma * (ket11 * a - ket00 * a) - Omega/2 * ket02)
+            #dket10_dt = -Gamma/2 * ket10 - 1j * (- (omega_1 - omega_c) * ket10 + gamma * (ket11_k * a_dagger - ket00 * a) - Omega/2 * ket20)
+            dket10_dt =np.conj(dket01_dt)
+            
+            dket11_dt = -Gamma * ket11 + 1j * gamma * (ket01 * a_dagger - ket10 * a) + 1j * Omega/2 * (ket21 - ket12)
+            dket22_dt = 1j * Omega / 2 * (ket12 - ket21)
+            
+            dket21_dt = -Gamma/2 * ket21 + 1j * (delta_2 * ket21 - delta_1 * ket21 - gamma * ket20 * a + Omega/2 * (ket11 - ket22) + 2*V * ket21*ket22)
+            dket12_dt = np.conj(dket21_dt)
+            
+            dket02_dt= 1j*(-delta_2*ket02-Omega/2*ket01-2*V*ket02*ket22+gamma *ket12 *a)
+            dket20_dt=np.conj(dket02_dt)
+            
+    
+            return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt,dket20_dt,dket02_dt]
+def solver(y0):
+            # sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
+            #                 , method='RK45', rtol=1e-12, atol=1e-15)
+            sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
+                            , method='DOP853', rtol=1e-13, atol=1e-16)
+            return sol
+
 start_time = time.time()
 def time_wrapper(func):
     def wrapper(*args, **kwargs):
@@ -128,47 +157,11 @@ for delta_2 in np.arange(8,10,0.5):
     
         
         
-        #print(psi00+psi11+psi22)
-        #@time_trac
-        #@time_wrapper
-        def dydt(t, y):
-            # Zerlegung der Zustandsvariablen
-            a, a_dagger, ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 = y
-        
-            #Differentialgleichungen für die Mittelwerte der Operatoren
-            da_dt = -kappa/2 *a - 1j*( gamma * ket01)+eta
-            #da_dagger_dt = -kappa/2 * a_dagger + 1j * gamma * ket10
-            da_dagger_dt =np.conj(da_dt)
-            
-            dket00_dt = +Gamma * ket11 + 1j * gamma * (ket10 * a - ket01 * a_dagger)
-            
-            dket01_dt = -Gamma/2 * ket01 + 1j * (-delta_1 * ket01 + gamma * (ket11 * a - ket00 * a) - Omega/2 * ket02)
-            #dket10_dt = -Gamma/2 * ket10 - 1j * (- (omega_1 - omega_c) * ket10 + gamma * (ket11_k * a_dagger - ket00 * a) - Omega/2 * ket20)
-            dket10_dt =np.conj(dket01_dt)
-            
-            dket11_dt = -Gamma * ket11 + 1j * gamma * (ket01 * a_dagger - ket10 * a) + 1j * Omega/2 * (ket21 - ket12)
-            dket22_dt = 1j * Omega / 2 * (ket12 - ket21)
-            
-            dket21_dt = -Gamma/2 * ket21 + 1j * (delta_2 * ket21 - delta_1 * ket21 - gamma * ket20 * a + Omega/2 * (ket11 - ket22) + 2*V * ket21*ket22)
-            dket12_dt = np.conj(dket21_dt)
-            
-            dket02_dt= 1j*(-delta_2*ket02-Omega/2*ket01-2*V*ket02*ket22+gamma *ket12 *a)
-            dket20_dt=np.conj(dket02_dt)
-            
-    
-            return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt,dket20_dt,dket02_dt]
-        
-        
         t_eval = np.linspace(0, T, 10000)  
         y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12,psi20,psi02]  # Anfangsbedingungen, vereinfachte Anfangszustände für Nicht-Diagonalelemente
         
-        #@time_wrapper
-        def solver(y0):
-            # sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
-            #                 , method='RK45', rtol=1e-12, atol=1e-15)
-            sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
-                            , method='DOP853', rtol=1e-13, atol=1e-16)
-            return sol
+
+
         sol=solver(y0)
     
         
@@ -205,7 +198,7 @@ for delta_2 in np.arange(8,10,0.5):
         # Save the initial and final values
         final_values = [sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]]
         final_values_full = [sol.y[2], sol.y[5], sol.y[6]]
-        results.append([V] + final_values)
+        #results.append([V] + final_values)
         
         #print([sol.y[2][-1], sol.y[5][-1], sol.y[6][-1]])
        
@@ -245,12 +238,7 @@ for delta_2 in np.arange(8,10,0.5):
     # Save to Excel
     
     
-    # Check if the file exists
-    if os.path.exists('results_3.pkl'):
-        df_existing = pd.read_pickle('results_3.pkl')
-        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-    else:
-        df_combined = df_new
+
     
     if os.path.exists('results_full_3.pkl'):
         df_full_existing = pd.read_pickle('results_full_3.pkl')
@@ -259,7 +247,6 @@ for delta_2 in np.arange(8,10,0.5):
         df_full_combined = df_full_new
     
     # Save the combined DataFrames
-    df_combined.to_pickle('results_3.pkl')
     df_full_combined.to_pickle('results_full_3.pkl')
     
     
