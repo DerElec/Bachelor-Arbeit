@@ -64,7 +64,11 @@ def plot_heatmap(data, title, xlabel='Omega', ylabel='V', cmap='viridis'):
     ax.set_xticklabels(np.round(np.linspace(Omega_unique.min(), Omega_unique.max(), num_x_ticks), 2))
     ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
     ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
-
+    # Plot horizontal line at y=0
+    x_zero_index = np.argmin(np.abs(Omega_unique))
+    plt.axvline(x=x_zero_index, color='red', linestyle='--')
+    y_zero_index = np.argmin(np.abs(V_unique))
+    plt.axhline(y=y_zero_index, color='red', linestyle='--')
     plt.show()
 
 # Plot each heatmap separately
@@ -72,4 +76,21 @@ plot_heatmap(heatmap_data_00, '<0|0>')
 plot_heatmap(heatmap_data_11, '<1|1>')
 plot_heatmap(heatmap_data_22, '<2|2>')
 plot_heatmap(heatmap_data_purity, 'Purity')
-#plot_heatmap(heatmap_data_variances, 'Variances')
+
+
+# Function to plot variances as a normal plot
+def plot_variances(V_vals, variances, index, title):
+    plt.figure(figsize=(10, 6))
+    variance_values = [var[index] for var in variances]
+    plt.plot(V_vals, variance_values, marker='o', linestyle='None')
+    plt.title(title)
+    plt.xlabel('V')
+    plt.ylabel(f'Variance {index+1}')
+    plt.grid(True)
+    plt.show()
+
+# Plot variances
+for i in range(len(variances[0])):
+    plot_variances(V_vals, variances, i, f'Variance {i+1}')
+
+
