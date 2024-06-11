@@ -8,13 +8,13 @@ import sympy as sp
 import os
 
 
-Omega_start=-2
-Omega_end=2
-Omega_step=0.1
+Omega_start=1
+Omega_end=1.5
+Omega_step=0.5
 
 Delta_start=1
-Delta_end=4
-Delta_step=0.1
+Delta_end=20
+Delta_step=0.5
 
 
 
@@ -115,7 +115,6 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         psi01 = 0.0 + 0j
         psi21=0.0+0j
         psi12=0.0+0j
-        startcond=[a0,a_dagger_0,psi00,psi11,psi22,psi10,psi01,psi21,psi12,psi20,psi02]
         ##################################################
         #Random testing
         # a0= 2*eta/kappa+0j
@@ -165,7 +164,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         
         t_eval = np.linspace(0, T, 10000)  
         y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12,psi20,psi02]  # Anfangsbedingungen, vereinfachte Anfangszustände für Nicht-Diagonalelemente
-        
+        startcond=[a0,a_dagger_0,psi00,psi11,psi22,psi10,psi01,psi21,psi12,psi20,psi02]
 
 
         sol=solver(y0)

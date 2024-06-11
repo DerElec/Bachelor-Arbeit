@@ -59,8 +59,9 @@ def compute(Omega):
             return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt, dket20_dt, dket02_dt]
 
         # Initial conditions
-        a0 = 0
-        a_dagger_0 = 0
+        #Random testing
+        a0= 0
+        a_dagger_0=0
         psi00 = 0
         psi11 = 0.0 + 0j
         psi22 = 1
@@ -68,8 +69,56 @@ def compute(Omega):
         psi02 = 0
         psi10 = 0.0 + 0j
         psi01 = 0.0 + 0j
-        psi21 = 0.0 + 0j
-        psi12 = 0.0 + 0j
+        psi21=0.0+0j
+        psi12=0.0+0j
+        ##################################################
+        #Random testing
+        # a0= 2*eta/kappa+0j
+        # a_dagger_0=2*eta/kappa+0j
+        # psi00 = 0
+        # psi11 = 0.0 + 0j
+        # psi22 = 1
+        # psi20 = -Omega*kappa*delta_2/(8*eta*gamma*V)
+        # psi02 = 4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1)
+        # psi10 = 0.0 + 0j
+        # psi01 = 0.0 + 0j
+        # psi21=0.0+0j
+        # psi12=0.0+0j
+        ####################################
+        #Stationary state# perturbed
+        # eps=0.05
+        # other=1-eps
+        # a0= -2*eta/kappa+0j
+        # a_dagger_0=-2*eta/kappa+0j
+        # psi00 = other*(delta_2/(2*V)+1)+eps/2
+        # psi11 = 0 +0j
+        # psi22 = -other*delta_2/(2*V)+eps/2
+        # psi20 = other*(-Omega*kappa*delta_2/(8*eta*gamma*V))
+        # psi02 = np.conj(psi20)
+        # #other*(4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
+        # psi10 = 0.0 + 0j
+        # psi01 = 0.0 + 0j
+        # psi21=0.0+0j
+        # psi12=0.0+0j
+        #####################################
+        #Stationary state# unperturbed
+        # a0= -2*eta/kappa+0j
+        # a_dagger_0=-2*eta/kappa+0j
+        # psi00 = (delta_2/(2*V)+1)
+        # psi11 = 0 +0j
+        # psi22 = -delta_2/(2*V)
+        # psi20 = (-Omega*kappa*delta_2/(8*eta*gamma*V))
+        # psi02 = (4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
+        # psi10 = 0.0 + 0j
+        # psi01 = 0.0 + 0j
+        # psi21=0.0+0j
+        # psi12=0.0+0j
+        
+        
+        
+        
+        
+        
         
         startcond = [a0, a_dagger_0, psi00, psi11, psi22, psi10, psi01, psi21, psi12, psi20, psi02]
 
