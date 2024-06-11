@@ -35,18 +35,19 @@ heatmap_data_00 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_11 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_22 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_purity = np.full((len(V_unique), len(Omega_unique)), np.nan)
-heatmap_data_variances= np.full((len(V_unique), len(Omega_unique)), np.nan)
+variance_matrices = [np.full((len(V_unique), len(Omega_unique)), np.nan) for _ in range(len(variances[0]))]
 
 # Fill the matrices
 for i, v in enumerate(V_unique):
     for j, o in enumerate(Omega_unique):
-        indices = np.where((V_vals == v) & (Omega == o))
-        if np.any(indices):
+        indices = np.where((V_vals == v) & (Omega == o))[0]
+        if indices.size > 0:
             heatmap_data_00[i, j] = np.real(psi_00_all[indices][0])
             heatmap_data_11[i, j] = np.real(psi_11_all[indices][0])
             heatmap_data_22[i, j] = np.real(psi_22_all[indices][0])
             heatmap_data_purity[i, j] = np.real(purity[indices][0])
-            #heatmap_data_variances[i, j] = np.real(variances[0][indices][0])
+            for k in range(len(variances[0])):
+                variance_matrices[k][i, j] = np.real(variances[indices[0]][k])
 
 # Function to plot each heatmap with linear scale
 def plot_heatmap(data, title, xlabel='Omega', ylabel='V', cmap='viridis'):
@@ -77,20 +78,8 @@ plot_heatmap(heatmap_data_11, '<1|1>')
 plot_heatmap(heatmap_data_22, '<2|2>')
 plot_heatmap(heatmap_data_purity, 'Purity')
 
-
-# Function to plot variances as a normal plot
-def plot_variances(V_vals, variances, index, title):
-    plt.figure(figsize=(10, 6))
-    variance_values = [var[index] for var in variances]
-    plt.plot(V_vals, variance_values, marker='o', linestyle='None')
-    plt.title(title)
-    plt.xlabel('V')
-    plt.ylabel(f'Variance {index+1}')
-    plt.grid(True)
-    plt.show()
-
-# Plot variances
-for i in range(len(variances[0])):
-    plot_variances(V_vals, variances, i, f'Variance {i+1}')
+# Plot variances heatmap
+for i, variance_matrix in enumerate(variance_matrices):
+    plot_heatmap(variance_matrix, f'Variance {i+1}')
 
 
