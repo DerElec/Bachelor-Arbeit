@@ -115,8 +115,8 @@ def calculate_variance(Averiging_rate,sol_00,sol_11,sol_22,averaged_vals):
     
     
     var_00 = np.trapz(zero_integrand)/Averiging_rate
-    var_11 = np.trapz(zero_integrand)/Averiging_rate
-    var_22 = np.trapz(zero_integrand)/Averiging_rate
+    var_11 = np.trapz(one_integrand)/Averiging_rate
+    var_22 = np.trapz(two_integrand)/Averiging_rate
     variances=[var_00,var_11,var_22]
     return variances
 
