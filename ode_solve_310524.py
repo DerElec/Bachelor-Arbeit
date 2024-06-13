@@ -8,9 +8,10 @@ import sympy as sp
 import os
 
 
-Omega_start=1
-Omega_end=1.5
-Omega_step=0.5
+
+Omega_start=0.1
+Omega_end=5
+Omega_step=0.1
 
 Delta_start=1
 Delta_end=20
@@ -39,8 +40,10 @@ results_full = []
 #
 #for lt in np.arange(-1,0,1):
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    for delta_2 in np.arange(Delta_start, Delta_end, Delta_step):  
-        #print(delta_2)
+    #for delta_2 in np.arange(Delta_start, Delta_end, Delta_step):  
+    for V in np.arange(-4,-0.1,0.1): 
+        delta_2=2
+       
         # Parameter for dgl    
         kappa = 1 #cavity loss rate0
         gamma = 1 #rate from cavity and atom coupling
@@ -52,14 +55,14 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         eta=1
         
         #V = 0.2 #Atom-Atom coupling constant
-        V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
+        #V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
         vals=[kappa,gamma,Gamma,Omega,delta_1,delta_2,eta,V]
         #V=-3.25
         #V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
         print(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1},{delta_2}')
         #print(f'V = {V}')
         #print(f'Omega = {Omega}')
-        T=2000
+        T=5000
          #Time 
         def dydt(t, y):
                     # Zerlegung der Zustandsvariablen

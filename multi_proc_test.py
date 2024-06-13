@@ -9,19 +9,20 @@ from multiprocessing import Pool
 import os
 
 
-Omega_start=0
+Omega_start=0.1
 Omega_end=5
 Omega_step=0.1
 
 Delta_start=0.1
 Delta_end=6
-Delta_step=0.01
+Delta_step=0.1
 
 
 def compute(Omega):
     result_full = []
-    for delta_2 in np.arange(Delta_start, Delta_end, Delta_step):
-        
+    #for delta_2 in np.arange(Delta_start, Delta_end, Delta_step):
+    for V in np.arange(-6,-0.1,0.1): 
+        delta_2=1
         kappa = 1 # cavity loss rate
         gamma = 1 # rate from cavity and atom coupling
         Gamma = 2 # Decay rate from first excited state to ground
@@ -30,10 +31,10 @@ def compute(Omega):
         #delta_2 = 2 # Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field)
         eta = 1
         
-        V = -delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
+        #V = -delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
         #print(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1},{delta_2}')
         vals = [kappa, gamma, Gamma, Omega, delta_1, delta_2, eta, V]
-        T = 2000 # Time 
+        T = 5000 # Time 
         #print(V)
         def dydt(t, y):
             # Decompose state variables
@@ -167,13 +168,13 @@ if __name__ == '__main__':
     # Create DataFrame
     df_full_new = pd.DataFrame(results_flat, columns=['V', '<0|0>', '<1|1>', '<2|2>', 'eigenvals', 'purity', 'additional params', 'startcond', 'Variances'])
 
-    if os.path.exists('results_full_3.pkl'):
-        df_full_existing = pd.read_pickle('results_full_3.pkl')
+    if os.path.exists('results_full_random_without_V.pkl'):
+        df_full_existing = pd.read_pickle('results_full_random_without_V.pkl')
         df_full_combined = pd.concat([df_full_existing, df_full_new], ignore_index=True)
     else:
         df_full_combined = df_full_new
     
     # Save the combined DataFrames
-    df_full_combined.to_pickle('results_full_3.pkl')
+    df_full_combined.to_pickle('results_full_random_without_V.pkl')
 
     print(f"Execution time: {time.time() - start_time} seconds")
