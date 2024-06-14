@@ -126,7 +126,7 @@ def compute(Omega):
         t_eval = np.linspace(0, T, 10000)
         y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12, psi20, psi02]
 
-        sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval, method='DOP853', rtol=1e-13, atol=1e-16)
+        sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval, method='DOP853', rtol=1e-8, atol=1e-10)
 
 
 

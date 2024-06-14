@@ -9,11 +9,11 @@ import os
 
 
 
-Omega_start=0.1
+Omega_start=4
 Omega_end=5
 Omega_step=0.1
 
-Delta_start=1
+Delta_start=5
 Delta_end=20
 Delta_step=0.5
 
@@ -28,10 +28,7 @@ def time_wrapper(func):
         end_time = time.perf_counter()  # Ende der Zeitmessung
         elapsed_time = end_time - start_time  # Berechnung der verstrichenen Zeit
         
-        # Speichern der Zeit in einer .txt Datei
-        with open('execution_times.txt', 'a') as file:
-            file.write(f"Die Ausführungsdauer von '{func.__name__}' betrug: {elapsed_time:.4f} Sekunden\n")
-        
+        print(elapsed_time)
         return result
     return wrapper
 
@@ -40,9 +37,9 @@ results_full = []
 #
 #for lt in np.arange(-1,0,1):
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    #for delta_2 in np.arange(Delta_start, Delta_end, Delta_step):  
-    for V in np.arange(-4,-0.1,0.1): 
-        delta_2=2
+    for delta_2 in np.arange(Delta_start, Delta_end, Delta_step):  
+    #for V in np.arange(-4,-0.1,0.1): 
+        #delta_2=2
        
         # Parameter for dgl    
         kappa = 1 #cavity loss rate0
@@ -55,7 +52,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         eta=1
         
         #V = 0.2 #Atom-Atom coupling constant
-        #V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
+        V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
         vals=[kappa,gamma,Gamma,Omega,delta_1,delta_2,eta,V]
         #V=-3.25
         #V=-delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)
@@ -90,11 +87,12 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
                     
             
                     return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt,dket20_dt,dket02_dt]
+        @time_wrapper
         def solver(y0):
                     # sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
                     #                 , method='RK45', rtol=1e-12, atol=1e-15)
                     sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval#, method='RK45', rtol=1e-12, atol=1e-15)
-                                    , method='DOP853', rtol=1e-13, atol=1e-16)
+                                    , method='DOP853', rtol=1e-10, atol=1e-12)
                     return sol
         ########################################
         #stationary state 
