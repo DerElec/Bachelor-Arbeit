@@ -4,11 +4,10 @@ import sympy as sp
 import numpy as np
 import seaborn as sns
 
-#df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
-#df_full = pd.read_pickle("results_full_random_with_V.pkl")
-#df_full = pd.read_pickle("results_full_random_with_V_2_stationary.pkl")
+# df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
+# df_full = pd.read_pickle("results_full_random_with_V.pkl")
+# df_full = pd.read_pickle("results_full_random_with_V_2_stationary.pkl")
 df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
-
 
 # Wähle die zu plottenden Datenpunkte aus
 V = df_full['V'].to_numpy()
@@ -41,6 +40,58 @@ for i, v in enumerate(V_unique):
             heatmap_data_purity[i, j] = get_real_value(purity[indices][0])
             variance_sum_matrix[i, j] = sum(get_real_value(var) for var in variances[indices[0]])
 
+
+# # Plot the heatmap with overlaid variances
+# plt.figure(figsize=(10, 8))
+# ax = sns.heatmap(heatmap_data_purity, cmap='viridis', cbar_kws={'label': 'Purity'})
+
+# # Overlay the variances as contour lines
+# contour = plt.contour(variance_sum_matrix, levels=10, colors='white', linestyles='dashed')
+# plt.clabel(contour, inline=True, fontsize=8, fmt='%.2f')
+
+# # Mark points where purity is 1
+# for i in range(len(V_unique)):
+#     for j in range(len(Omega_unique)):
+#         if heatmap_data_purity[i, j] > 1-0.0000001:
+#             plt.plot(j + 0.5, i + 0.5, 'ro', markersize=5)
+
+# # Set axis labels
+# ax.set_xlabel('Omega')
+# ax.set_ylabel('V')
+
+# # Set linear scale for ticks
+# num_x_ticks = 20
+# num_y_ticks = 20
+# ax.set_xticks(np.linspace(0, len(Omega_unique) - 1, num_x_ticks))
+# ax.set_xticklabels(np.round(np.linspace(Omega_unique.min(), Omega_unique.max(), num_x_ticks), 2))
+# ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
+# ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
+
+# plt.title('Purity Heatmap with Variance Sum Contours')
+# plt.show()
+
+
+
+
+
+
+
+
+
+
+
+# Find and mark the purity value closest to 1 for each Omega
+closest_to_one = []
+for j in range(len(Omega_unique)):
+    column = heatmap_data_purity[:, j]
+    if not np.isnan(column).all():
+        closest_index = np.nanargmin(np.abs(column - 1))
+        closest_to_one.append(column[closest_index])
+
+# Find the value furthest from 1
+furthest_from_one = max(closest_to_one, key=lambda x: abs(x - 1))
+print("Value furthest from 1:", furthest_from_one)
+
 # Plot the heatmap with overlaid variances
 plt.figure(figsize=(10, 8))
 ax = sns.heatmap(heatmap_data_purity, cmap='viridis', cbar_kws={'label': 'Purity'})
@@ -48,6 +99,13 @@ ax = sns.heatmap(heatmap_data_purity, cmap='viridis', cbar_kws={'label': 'Purity
 # Overlay the variances as contour lines
 contour = plt.contour(variance_sum_matrix, levels=10, colors='white', linestyles='dashed')
 plt.clabel(contour, inline=True, fontsize=8, fmt='%.2f')
+
+# Mark points where purity is closest to 1
+for j in range(len(Omega_unique)):
+    column = heatmap_data_purity[:, j]
+    if not np.isnan(column).all():
+        closest_index = np.nanargmin(np.abs(column - 1))
+        plt.plot(j + 0.5, closest_index + 0.5, 'ro', markersize=5)
 
 # Set axis labels
 ax.set_xlabel('Omega')

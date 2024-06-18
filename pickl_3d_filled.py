@@ -3,8 +3,10 @@ import matplotlib.pyplot as plt
 import sympy as sp
 import numpy as np
 import seaborn as sns
+import imageio.v2 as imageio 
+import os
 
-# Lade die Daten aus der .pkl Datei
+
 df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
 
 # Wähle die zu plottenden Datenpunkte aus und filtere V > 0
@@ -56,7 +58,7 @@ for i, v in enumerate(V_unique):
                 variance_matrices[k][i, j] = get_real_value(variances.iloc[indices[0]][k])
 
 
-def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', phase_transition=None):
+def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis'):
     plt.figure(figsize=(10, 8))
     ax = sns.heatmap(data, cmap=cmap, cbar_kws={'label': title})
     ax.set_xlabel(xlabel)
@@ -71,30 +73,25 @@ def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis
     ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
     ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
 
-    if phase_transition:
-        plt.axhline(y=phase_transition, color='red', linewidth=2, linestyle='--')
-    
+
     plt.show()
 
-# Define phase transition (example value, you might need to adjust this based on your data)
-phase_transition = 5  # Placeholder value for the phase transition
 
 # Plot each heatmap separately with phase transition line
-plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V', phase_transition=phase_transition)
-plot_heatmap_adjusted(heatmap_data_11, '<1|1>', 'Omega', 'V', phase_transition=phase_transition)
-plot_heatmap_adjusted(heatmap_data_22, '<2|2>', 'Omega', 'V', phase_transition=phase_transition)
-plot_heatmap_adjusted(heatmap_data_purity, 'Purity', 'Omega', 'V', phase_transition=phase_transition)
+plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V')
+plot_heatmap_adjusted(heatmap_data_11, '<1|1>', 'Omega', 'V')
+plot_heatmap_adjusted(heatmap_data_22, '<2|2>', 'Omega', 'V')
+plot_heatmap_adjusted(heatmap_data_purity, 'Purity', 'Omega', 'V')
 
 # Plot variances heatmap
 for i, variance_matrix in enumerate(variance_matrices):
-    plot_heatmap_adjusted(variance_matrix, f'Variance {i + 1}', 'Omega', 'V', phase_transition=phase_transition)
+    plot_heatmap_adjusted(variance_matrix, f'Variance {i + 1}', 'Omega', 'V')
 
 # 2D plot of variance over V
 variance_over_V = [get_real_value(variance[0])+get_real_value(variance[1])+get_real_value(variance[2]) for variance in variances]
 
 plt.figure(figsize=(10, 8))
 plt.plot(V, variance_over_V, 'o-', linewidth=0)
-plt.axvline(x=phase_transition, color='red', linewidth=2, linestyle='--')
 plt.xlabel('V')
 plt.ylabel('Variances sum')
 plt.title('Variance over V')
@@ -142,4 +139,89 @@ for i, d in enumerate(delta_2_unique):
         if indices.size > 0:
             heatmap_data_purity_delta2[i, j] = get_real_value(purity[indices][0])
 
-plot_heatmap_delta2(heatmap_data_purity_delta2, 'Purity over Omega and Delta_2', 'Omega', 'Delta_2', phase_transition=phase_transition)
+plot_heatmap_delta2(heatmap_data_purity_delta2, 'Purity over Omega and Delta_2', 'Omega', 'Delta_2')
+
+
+# # Überprüfe die einzigartigen Omega-Werte
+# unique_Omega_values = np.unique(Omega)
+# print("Verfügbare Omega-Werte:", unique_Omega_values)
+
+# # Setze einen festen Omega-Wert (wähle einen, der in den verfügbaren Werten liegt)
+# for i in range(len(unique_Omega_values)):
+#     fixed_Omega = unique_Omega_values[i]  # Wähle den ersten verfügbaren Wert als Beispiel
+#     print(f"Gewählter Omega-Wert: {fixed_Omega}")
+
+#     # Finde die Indizes für den festen Omega-Wert
+#     indices_fixed_Omega = np.where(Omega == fixed_Omega)[0]
+#     if indices_fixed_Omega.size > 0:
+#         psi_22_fixed_Omega = np.array([get_real_value(val) for val in psi_22_all[indices_fixed_Omega]])
+#         purity_fixed_Omega = np.array([get_real_value(val) for val in purity[indices_fixed_Omega]])
+    
+#         plt.figure(figsize=(10, 8))
+#         plt.scatter(psi_22_fixed_Omega, purity_fixed_Omega, c='b', marker='o')
+#         plt.xlabel('psi_22')
+#         plt.ylabel('Purity')
+#         plt.title(f'psi_22 vs Purity für Omega = {fixed_Omega}')
+#         plt.grid(True)
+#         plt.show()
+#     else:
+#         print(f"Keine Datenpunkte für Omega = {fixed_Omega}")
+
+# Überprüfe die einzigartigen Omega-Werte
+unique_Omega_values = np.unique(Omega)
+print("Verfügbare Omega-Werte:", unique_Omega_values)
+
+
+# Liste zur Speicherung der Bildpfade
+image_files = []
+
+# Erstelle Plots für jeden einzigartigen Omega-Wert und speichere sie als Bilder
+for i in range(len(unique_Omega_values)):
+    fixed_Omega = unique_Omega_values[i]  # Wähle den aktuellen Omega-Wert
+    print(f"Gewählter Omega-Wert: {fixed_Omega}")
+
+    # Finde die Indizes für den festen Omega-Wert
+    indices_fixed_Omega = np.where(Omega == fixed_Omega)[0]
+    if indices_fixed_Omega.size > 0:
+        psi_22_fixed_Omega = np.array([get_real_value(val) for val in psi_22_all[indices_fixed_Omega]])
+        purity_fixed_Omega = np.array([get_real_value(val) for val in purity[indices_fixed_Omega]])
+    
+        plt.figure(figsize=(10, 8))
+        plt.scatter(psi_22_fixed_Omega, purity_fixed_Omega, c='b', marker='o')
+        plt.xlabel('psi_22')
+        plt.ylabel('Purity')
+        plt.title(f'psi_22 vs Purity für Omega = {fixed_Omega}')
+        plt.grid(True)
+        
+        # Bildpfad festlegen und speichern
+        image_path = f'plot_{i}.png'
+        plt.savefig(image_path)
+        plt.close()
+        
+        # Füge den Bildpfad zur Liste hinzu
+        image_files.append(image_path)
+    else:
+        print(f"Keine Datenpunkte für Omega = {fixed_Omega}")
+
+# Erstelle ein GIF aus den gespeicherten Bildern
+images = [imageio.imread(image_file) for image_file in image_files]
+output_path = 'psitopurity.gif'
+imageio.mimsave(output_path, images, duration=0.5)
+
+# Lösche die temporären Bilddateien
+for image_file in image_files:
+    os.remove(image_file)
+
+print(f"GIF wurde gespeichert als {output_path}")
+
+
+
+
+
+
+
+
+
+
+
+
