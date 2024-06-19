@@ -15,8 +15,14 @@ purity = df_full['purity'].to_numpy()
 variances = df_full['Variances']
 values = df_full['additional params'].to_numpy()
 
-# Extract Omega and V values from additional params
+# Extract parameters from additional params
+kappa = np.array([params[0] for params in values])
+gamma = np.array([params[1] for params in values])
+# Gamma = np.array([params[2] for params in values])  # Not used in the formula
 Omega = np.array([params[3] for params in values])
+# delta_1 = np.array([params[4] for params in values])  # Not used in the formula
+delta_2 = np.array([params[5] for params in values])
+eta = np.array([params[6] for params in values])
 V_vals = np.array([params[7] for params in values])
 
 # Create a meshgrid 
@@ -40,57 +46,9 @@ for i, v in enumerate(V_unique):
             heatmap_data_purity[i, j] = get_real_value(purity[indices][0])
             variance_sum_matrix[i, j] = sum(get_real_value(var) for var in variances[indices[0]])
 
-
-# # Plot the heatmap with overlaid variances
-# plt.figure(figsize=(10, 8))
-# ax = sns.heatmap(heatmap_data_purity, cmap='viridis', cbar_kws={'label': 'Purity'})
-
-# # Overlay the variances as contour lines
-# contour = plt.contour(variance_sum_matrix, levels=10, colors='white', linestyles='dashed')
-# plt.clabel(contour, inline=True, fontsize=8, fmt='%.2f')
-
-# # Mark points where purity is 1
-# for i in range(len(V_unique)):
-#     for j in range(len(Omega_unique)):
-#         if heatmap_data_purity[i, j] > 1-0.0000001:
-#             plt.plot(j + 0.5, i + 0.5, 'ro', markersize=5)
-
-# # Set axis labels
-# ax.set_xlabel('Omega')
-# ax.set_ylabel('V')
-
-# # Set linear scale for ticks
-# num_x_ticks = 20
-# num_y_ticks = 20
-# ax.set_xticks(np.linspace(0, len(Omega_unique) - 1, num_x_ticks))
-# ax.set_xticklabels(np.round(np.linspace(Omega_unique.min(), Omega_unique.max(), num_x_ticks), 2))
-# ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
-# ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
-
-# plt.title('Purity Heatmap with Variance Sum Contours')
-# plt.show()
-
-
-
-
-
-
-
-
-
-
-
-# Find and mark the purity value closest to 1 for each Omega
-closest_to_one = []
-for j in range(len(Omega_unique)):
-    column = heatmap_data_purity[:, j]
-    if not np.isnan(column).all():
-        closest_index = np.nanargmin(np.abs(column - 1))
-        closest_to_one.append(column[closest_index])
-
-# Find the value furthest from 1
-furthest_from_one = max(closest_to_one, key=lambda x: abs(x - 1))
-print("Value furthest from 1:", furthest_from_one)
+# Calculate the line points for the condition V = -delta_2/2 * ((Omega * kappa)^2 / (16 * (eta * gamma)^2) + 1)
+Omega_line = np.linspace(Omega_unique.min(), Omega_unique.max(), 500)
+V_line = np.mean(-delta_2 / 2 * ((Omega_line[:, np.newaxis] * kappa[np.newaxis, :])**2 / (16 * (eta[np.newaxis, :] * gamma[np.newaxis, :])**2) + 1), axis=1)
 
 # Plot the heatmap with overlaid variances
 plt.figure(figsize=(10, 8))
@@ -100,12 +58,10 @@ ax = sns.heatmap(heatmap_data_purity, cmap='viridis', cbar_kws={'label': 'Purity
 contour = plt.contour(variance_sum_matrix, levels=10, colors='white', linestyles='dashed')
 plt.clabel(contour, inline=True, fontsize=8, fmt='%.2f')
 
-# Mark points where purity is closest to 1
-for j in range(len(Omega_unique)):
-    column = heatmap_data_purity[:, j]
-    if not np.isnan(column).all():
-        closest_index = np.nanargmin(np.abs(column - 1))
-        plt.plot(j + 0.5, closest_index + 0.5, 'ro', markersize=5)
+# Plot the line for the given condition
+plt.plot((Omega_line - Omega_unique.min()) / (Omega_unique.max() - Omega_unique.min()) * (len(Omega_unique) - 1),
+         (V_line - V_unique.min()) / (V_unique.max() - V_unique.min()) * (len(V_unique) - 1),
+         'r-', label='V condition line')
 
 # Set axis labels
 ax.set_xlabel('Omega')
@@ -119,5 +75,6 @@ ax.set_xticklabels(np.round(np.linspace(Omega_unique.min(), Omega_unique.max(), 
 ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
 ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
 
-plt.title('Purity Heatmap with Variance Sum Contours')
+plt.title('Purity Heatmap with Variance Sum Contours and V Condition Line')
+plt.legend()
 plt.show()

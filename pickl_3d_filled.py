@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 import sympy as sp
 import numpy as np
 import seaborn as sns
-import imageio.v2 as imageio 
-import os
-
 
 df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
 
@@ -39,7 +36,6 @@ heatmap_data_22 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_purity = np.full((len(V_unique), len(Omega_unique)), np.nan)
 variance_matrices = [np.full((len(V_unique), len(Omega_unique)), np.nan) for _ in range(len(variances.iloc[0]))]
 
-
 def get_real_value(value):
     if isinstance(value, sp.Expr):
         return float(sp.re(value))
@@ -57,7 +53,6 @@ for i, v in enumerate(V_unique):
             for k in range(len(variances.iloc[indices[0]])):
                 variance_matrices[k][i, j] = get_real_value(variances.iloc[indices[0]][k])
 
-
 def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis'):
     plt.figure(figsize=(10, 8))
     ax = sns.heatmap(data, cmap=cmap, cbar_kws={'label': title})
@@ -73,9 +68,7 @@ def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis
     ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
     ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
 
-
     plt.show()
-
 
 # Plot each heatmap separately with phase transition line
 plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V')
@@ -141,87 +134,24 @@ for i, d in enumerate(delta_2_unique):
 
 plot_heatmap_delta2(heatmap_data_purity_delta2, 'Purity over Omega and Delta_2', 'Omega', 'Delta_2')
 
-
-# # Überprüfe die einzigartigen Omega-Werte
-# unique_Omega_values = np.unique(Omega)
-# print("Verfügbare Omega-Werte:", unique_Omega_values)
-
-# # Setze einen festen Omega-Wert (wähle einen, der in den verfügbaren Werten liegt)
-# for i in range(len(unique_Omega_values)):
-#     fixed_Omega = unique_Omega_values[i]  # Wähle den ersten verfügbaren Wert als Beispiel
-#     print(f"Gewählter Omega-Wert: {fixed_Omega}")
-
-#     # Finde die Indizes für den festen Omega-Wert
-#     indices_fixed_Omega = np.where(Omega == fixed_Omega)[0]
-#     if indices_fixed_Omega.size > 0:
-#         psi_22_fixed_Omega = np.array([get_real_value(val) for val in psi_22_all[indices_fixed_Omega]])
-#         purity_fixed_Omega = np.array([get_real_value(val) for val in purity[indices_fixed_Omega]])
-    
-#         plt.figure(figsize=(10, 8))
-#         plt.scatter(psi_22_fixed_Omega, purity_fixed_Omega, c='b', marker='o')
-#         plt.xlabel('psi_22')
-#         plt.ylabel('Purity')
-#         plt.title(f'psi_22 vs Purity für Omega = {fixed_Omega}')
-#         plt.grid(True)
-#         plt.show()
-#     else:
-#         print(f"Keine Datenpunkte für Omega = {fixed_Omega}")
-
-# Überprüfe die einzigartigen Omega-Werte
 unique_Omega_values = np.unique(Omega)
 print("Verfügbare Omega-Werte:", unique_Omega_values)
 
-
-# Liste zur Speicherung der Bildpfade
-image_files = []
-
-# Erstelle Plots für jeden einzigartigen Omega-Wert und speichere sie als Bilder
-for i in range(len(unique_Omega_values)):
-    fixed_Omega = unique_Omega_values[i]  # Wähle den aktuellen Omega-Wert
-    print(f"Gewählter Omega-Wert: {fixed_Omega}")
-
-    # Finde die Indizes für den festen Omega-Wert
+# Plot Purity and psi_22 over V for all unique Omega values
+for fixed_Omega in unique_Omega_values:
     indices_fixed_Omega = np.where(Omega == fixed_Omega)[0]
+
     if indices_fixed_Omega.size > 0:
+        V_fixed_Omega = V[indices_fixed_Omega]
         psi_22_fixed_Omega = np.array([get_real_value(val) for val in psi_22_all[indices_fixed_Omega]])
         purity_fixed_Omega = np.array([get_real_value(val) for val in purity[indices_fixed_Omega]])
-    
+
         plt.figure(figsize=(10, 8))
-        plt.scatter(psi_22_fixed_Omega, purity_fixed_Omega, c='b', marker='o')
-        plt.xlabel('psi_22')
-        plt.ylabel('Purity')
-        plt.title(f'psi_22 vs Purity für Omega = {fixed_Omega}')
+        plt.plot(V_fixed_Omega, psi_22_fixed_Omega, 'o-', label='psi_22', linewidth=0)
+        plt.plot(V_fixed_Omega, purity_fixed_Omega, 's-', label='Purity', linewidth=0)
+        plt.xlabel('V')
+        plt.ylabel('Values')
+        plt.title(f'Purity and psi_22 over V for Omega = {fixed_Omega}')
+        plt.legend()
         plt.grid(True)
-        
-        # Bildpfad festlegen und speichern
-        image_path = f'plot_{i}.png'
-        plt.savefig(image_path)
-        plt.close()
-        
-        # Füge den Bildpfad zur Liste hinzu
-        image_files.append(image_path)
-    else:
-        print(f"Keine Datenpunkte für Omega = {fixed_Omega}")
-
-# Erstelle ein GIF aus den gespeicherten Bildern
-images = [imageio.imread(image_file) for image_file in image_files]
-output_path = 'psitopurity.gif'
-imageio.mimsave(output_path, images, duration=0.5)
-
-# Lösche die temporären Bilddateien
-for image_file in image_files:
-    os.remove(image_file)
-
-print(f"GIF wurde gespeichert als {output_path}")
-
-
-
-
-
-
-
-
-
-
-
-
+        plt.show()

@@ -11,8 +11,11 @@ import sympy as sp
 import numpy as np
 import seaborn as sns
 
-# Lade die Daten aus der .pkl Datei
+#df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
+#df_full = pd.read_pickle("results_full_random_with_V.pkl")
+#df_full = pd.read_pickle("results_full_random_with_V_2_stationary.pkl")
 df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
+
 
 # Wähle die zu plottenden Datenpunkte aus und filtere V < 0
 df_filtered = df_full[df_full['V'] < 0]
