@@ -5,6 +5,10 @@ import numpy as np
 import seaborn as sns
 
 df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
+#df_full = pd.read_pickle("results_without_V_start_0.pkl")
+#df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
+
+
 
 # Wähle die zu plottenden Datenpunkte aus und filtere V > 0
 df_filtered = df_full[df_full['V'] < 0]
