@@ -35,6 +35,7 @@ def compute(Omega):
         #print(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1},{delta_2}')
         vals = [kappa, gamma, Gamma, Omega, delta_1, delta_2, eta, V]
         T = 20000 # Time 
+        T_auflösung=100*T # this gives how many datapoints are between 0 and T
         #print(V)
         def dydt(t, y):
             # Decompose state variables
@@ -123,7 +124,7 @@ def compute(Omega):
         
         startcond = [a0, a_dagger_0, psi00, psi11, psi22, psi10, psi01, psi21, psi12, psi20, psi02]
 
-        t_eval = np.linspace(0, T, 10000)
+        t_eval = np.linspace(0, T, T_auflösung)
         y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12, psi20, psi02]
 
         sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval, method='DOP853', rtol=1e-8, atol=1e-10)
@@ -140,18 +141,36 @@ def compute(Omega):
             [sol.y[10][-1], sol.y[3][-1], sol.y[2][-1]]
         ])
         
-        trace, eigenvals = tr.get_trace_eigenvals(rho_unstationary)
+        purity, eigenvals = tr.get_trace_eigenvals(rho_unstationary)
         
         for i in eigenvals:
             if sp.re(i) < -np.exp(-12):
                 print(f"Problematic, eigenvalue is {i}")
                 break
+        if purity<0:
+            print("Purity isnt positiv")
+            break
         
-        Averiging_rate = 50
-        averaged_vals = tr.calculate_avrg(Averiging_rate, sol.y[2], sol.y[5], sol.y[6])
-        variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals)
+        # Bestimme den niedrigsten Wert in jedem Array
+        min_array1, max_array1 = np.min(sol.y[2]),np.max(sol.y[2])
+        min_array2,max_array2 = np.min(sol.y[5]),np.max(sol.y[5])
+        min_array3,max_array3 = np.min(sol.y[6]),np.max(sol.y[6])
+        
+        # Bestimme den niedrigsten Wert aus den drei niedrigsten Werten
+        overall_min,overall_max = min(min_array1, min_array2, min_array3),max(max_array1, max_array2, max_array3)
+        if overall_min<0:
+            print("Error, negative value for either 00,11,22")
+            break
+        if overall_max>1:
+            print("Error, expect value to big")
+            break
+        
+        Averiging_rate = 500
+        t_last_x_values = sol.t[-Averiging_rate:]     # Corresponding time values for the last x points
+        averaged_vals = tr.calculate_avrg(Averiging_rate, sol.y[2], sol.y[5], sol.y[6],t_last_x_values)
+        variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals,t_last_x_values)
         #print([V] + averaged_vals + [eigenvals] + [trace] + [vals] + [startcond] + [variances])
-        result_full.append([V] + averaged_vals + [eigenvals] + [trace] + [vals] + [startcond] + [variances])
+        result_full.append([V] + averaged_vals + [eigenvals] + [purity] + [vals] + [startcond] + [variances])
         
     return result_full
 

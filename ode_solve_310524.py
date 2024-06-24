@@ -9,9 +9,9 @@ import os
 
 
 
-Omega_start=0.1
-Omega_end=5
-Omega_step=0.1
+Omega_start=4.9
+Omega_end=6
+Omega_step=10
 
 Delta_start=1
 Delta_end=4
@@ -40,7 +40,7 @@ results_full = []
 #
 #for lt in np.arange(-1,0,1):
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    for V in np.arange(-6,-0.1,0.1):  
+    for V in np.arange(-6.8,0,10):  
         #print(delta_2)
         # Parameter for dgl    
         kappa = 1 #cavity loss rate0
@@ -52,7 +52,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         delta_2 = 1 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
         eta=1
         
-        #V = 0.2 #Atom-Atom coupling constant
+        #V = -5.53 #Atom-Atom coupling constant
         #V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
         vals=[kappa,gamma,Gamma,Omega,delta_1,delta_2,eta,V]
         #V=-3.25
@@ -60,7 +60,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         print(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1},{delta_2}')
         #print(f'V = {V}')
         #print(f'Omega = {Omega}')
-        T=20000
+        T=2000
          #Time 
         def dydt(t, y):
                     # Zerlegung der Zustandsvariablen
@@ -107,9 +107,9 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         #Random testing
         a0= 0
         a_dagger_0=0
-        psi00 = 1
+        psi00 = 0
         psi11 = 0.0 + 0j
-        psi22 = 0
+        psi22 = 1
         psi20 = 0
         psi02 = 0
         psi10 = 0.0 + 0j
