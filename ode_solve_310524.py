@@ -9,9 +9,9 @@ import os
 
 
 
-Omega_start=4.9
-Omega_end=6
-Omega_step=10
+Omega_start=5.8000000000000025
+Omega_end=6.2
+Omega_step=1
 
 Delta_start=1
 Delta_end=4
@@ -40,7 +40,7 @@ results_full = []
 #
 #for lt in np.arange(-1,0,1):
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    for V in np.arange(-6.8,0,10):  
+    for V in np.arange(-5.1000000000000405,-4.9,1):  
         #print(delta_2)
         # Parameter for dgl    
         kappa = 1 #cavity loss rate0
@@ -61,6 +61,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         #print(f'V = {V}')
         #print(f'Omega = {Omega}')
         T=2000
+        T_auflösung=100*T # describes the resolution
          #Time 
         def dydt(t, y):
                     # Zerlegung der Zustandsvariablen
@@ -164,7 +165,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         startcond=[a0,a_dagger_0,psi00,psi11,psi22,psi10,psi01,psi21,psi12,psi20,psi02]
         
         
-        t_eval = np.linspace(0, T, 10000)  
+        t_eval = np.linspace(0, T, T_auflösung)  
         y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12,psi20,psi02]  # Anfangsbedingungen, vereinfachte Anfangszustände für Nicht-Diagonalelemente
         
 
@@ -216,29 +217,48 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
             [sol.y[8][-1], sol.y[5][-1],sol.y[4][-1] ],
             [sol.y[10][-1], sol.y[3][-1],sol.y[2][-1] ]
         ])
-        trace,eigenvals=tr.get_trace_eigenvals(rho_unstationary)
+        purity,eigenvals=tr.get_trace_eigenvals(rho_unstationary)
         for i in eigenvals:
             if sp.re(i)<-np.e**(-12):
                 break
                 print(f"problematic, eigenvalue is {i}")
         #print(f"Purity is {trace}") 
+        if purity<0:
+            print("Purity isnt positiv")
+            break
         
+        # Bestimme den niedrigsten Wert in jedem Array
+        min_array1, max_array1 = np.min(sol.y[2]),np.max(sol.y[2])
+        min_array2,max_array2 = np.min(sol.y[5]),np.max(sol.y[5])
+        min_array3,max_array3 = np.min(sol.y[6]),np.max(sol.y[6])
+        
+        # Bestimme den niedrigsten Wert aus den drei niedrigsten Werten
+        overall_min,overall_max = min(min_array1, min_array2, min_array3),max(max_array1, max_array2, max_array3)
+        if overall_min<0:
+            print("Error, negative value for either 00,11,22")
+            break
+        if overall_max>1:
+            print("Error, expect value to big")
+            break
         
         
         ##################################################################################
         #Averiging results
-        Averiging_rate=50
-        averaged_vals=tr.calculate_avrg(Averiging_rate,sol.y[2],sol.y[5],sol.y[6])
+        Averiging_rate = 500
+        t_last_x_values = sol.t[-Averiging_rate:] 
+        averaged_vals=tr.calculate_avrg(Averiging_rate,sol.y[2],sol.y[5],sol.y[6],t_last_x_values)
         
         ##################################################################################
         #Calculating variance
     
-        variances=tr.calculate_variance(Averiging_rate, sol.y[2],sol.y[5],sol.y[6], averaged_vals)
-        #print(variances)
+        variances=tr.calculate_variance(Averiging_rate, sol.y[2],sol.y[5],sol.y[6], averaged_vals,t_last_x_values)
+        print(variances)
+        Vergleich_var=[np.var(sol.y[2][-Averiging_rate:]),np.var(sol.y[5][-Averiging_rate:]),np.var(sol.y[6][-Averiging_rate:])]
+        print(f"Vergleich Variancen={Vergleich_var}")
         ##################################################################################
         
         results_full.append([V] +averaged_vals #final_values_full
-                            +[eigenvals]+[trace]+[vals]+[startcond]+[variances])
+                            +[eigenvals]+[purity]+[vals]+[startcond]+[variances])
         
     df_full_new = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>','eigenvals','purity','additional params','startcond','Variances'])
     # Save to Excel
@@ -246,14 +266,14 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
     
 
     
-    if os.path.exists('results_full_3.pkl'):
-        df_full_existing = pd.read_pickle('results_full_3.pkl')
+    if os.path.exists('results_variances.pkl'):
+        df_full_existing = pd.read_pickle('results_variances.pkl')
         df_full_combined = pd.concat([df_full_existing, df_full_new], ignore_index=True)
     else:
         df_full_combined = df_full_new
     
     # Save the combined DataFrames
-    df_full_combined.to_pickle('results_full_3.pkl')
+    df_full_combined.to_pickle('results_variances.pkl')
     
     
     

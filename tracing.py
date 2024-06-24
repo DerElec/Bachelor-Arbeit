@@ -34,9 +34,9 @@ def calculate_variance(Averiging_rate,sol_00,sol_11,sol_22,averaged_vals,t_last_
     zero_vals = sol_00[-Averiging_rate:]
     one_vals=sol_11[-Averiging_rate:]
     two_vals=sol_22[-Averiging_rate:]
-    zero_vals = sol_00[-Averiging_rate:]
-    one_vals=sol_11[-Averiging_rate:]
-    two_vals=sol_22[-Averiging_rate:]
+    # zero_vals = sol_00[-Averiging_rate:]
+    # one_vals=sol_11[-Averiging_rate:]
+    # two_vals=sol_22[-Averiging_rate:]
     
     zero_integrand=(zero_vals-integral_00)**2
     one_integrand=(one_vals-integral_11)**2

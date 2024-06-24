@@ -35,7 +35,7 @@ def compute(Omega):
         #print(f'kappa={kappa},gamma={gamma},Gamma={Gamma},V={V},Omega={Omega},eta={eta},delta_1,2={delta_1},{delta_2}')
         vals = [kappa, gamma, Gamma, Omega, delta_1, delta_2, eta, V]
         T = 20000 # Time 
-        T_auflösung=100*T # this gives how many datapoints are between 0 and T
+        T_auflösung=100*T # this gives how many datapoints are between 0 and T or in otherwords resolution
         #print(V)
         def dydt(t, y):
             # Decompose state variables
