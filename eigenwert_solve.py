@@ -7,22 +7,23 @@ Created on Sun Jun  2 18:37:54 2024
 
 import numpy as np
 
+Delta_2=1
 kappa = 1 # cavity loss rate
 gamma = 1 # rate from cavity and atom coupling
 Gamma = 2 # Decay rate from first excited state to ground
-
+g_0=1
 Delta_1 = 1 # Detuning between first excited state and cavity-Pump detuning
 #delta_2 = 2 # Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field)
 eta = 1
-g_0=1
-Delta_2=1
-Omega=1
+
+#V=-5.1
+Omega=5.8
 V = -Delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
 
 #V = 0.2 #Atom-Atom coupling constant
 # V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
 
-V=-Delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)#-10#-Delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)-1)
+#V=-Delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)+1)#-10#-Delta_2/2*((Omega*kappa)**2/(16*(eta*gamma)**2)-1)
 print(f"We have a V of :{V}")
 
 a= -2*eta/kappa+0j
