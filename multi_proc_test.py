@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(filename='error.log', level=logging.ERROR)
 Omega_start = 1
 Omega_end = 10
-Omega_step = 0.1
+Omega_step = 1
 
 Delta_start = 0.1
 Delta_end = 6
@@ -21,7 +21,7 @@ Delta_step = 0.1
 
 def compute(Omega):
     result_full = []
-    for V in np.arange(-7, -0.1, 0.1): 
+    for V in np.arange(-7, -0.1, 0.5): 
         delta_2 = 1
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
@@ -54,19 +54,29 @@ def compute(Omega):
 
             return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt, dket20_dt, dket02_dt]
 
+        # a0 = 0
+        # a_dagger_0 = 0
+        # psi00 = 0
+        # psi11 = 0.0 + 0j
+        # psi22 = 1
+        # psi20 = 0
+        # psi02 = 0
+        # psi10 = 0.0 + 0j
+        # psi01 = 0.0 + 0j
+        # psi21 = 0.0 + 0j
+        # psi12 = 0.0 + 0j
+        ################################
         a0 = 0
         a_dagger_0 = 0
-        psi00 = 0
-        psi11 = 0.0 + 0j
-        psi22 = 1
-        psi20 = 0
-        psi02 = 0
-        psi10 = 0.0 + 0j
-        psi01 = 0.0 + 0j
-        psi21 = 0.0 + 0j
-        psi12 = 0.0 + 0j
-        
-        startcond = [a0, a_dagger_0, psi00, psi11, psi22, psi10, psi01, psi21, psi12, psi20, psi02]
+        psi00 = 0.32114059488639229-0.00000000000000000j
+        psi01 = -0.09934076258338194+0.11840399957296362j
+        psi02 = -0.09268208075981116-0.01307119588540335j
+        psi10 = -0.09934076258338195-0.11840399957296362j
+        psi11 = 0.35867514453638044+0.00000000000000001j
+        psi12 = 0.10886730973070291+0.06873136581451349j
+        psi20 = -0.09268208075981113+0.01307119588540335j
+        psi21 = 0.10886730973070288-0.06873136581451347j
+        psi22 = 0.32018426057722715-0.00000000000000001j
 
         t_eval = np.linspace(0, T, T_auflösung)
         y0 = [a0, a_dagger_0, psi00, psi01, psi10, psi11, psi22, psi21, psi12, psi20, psi02]
@@ -88,14 +98,14 @@ def compute(Omega):
         
         overall_min, overall_max = min(min_array1, min_array2, min_array3), max(max_array1, max_array2, max_array3)
         try:
-            if sp.re(overall_min) < -np.exp(-10):
+            if sp.re(overall_min) < -10**(-10):
                 logging.error(f"Error, negative value for either 00, 11, 22: {overall_min}")
-            if sp.re(overall_max) > 1 + np.exp(-10):
+            if sp.re(overall_max) > 1 + 10**(-10):
                 logging.error(f"Error, expect value too big: {overall_max}")
             for i in eigenvals:
-                if sp.re(i) < -np.exp(-10):
+                if sp.re(i) < -10**(-10):
                     logging.error(f"Problematic, eigenvalue is {i}")
-            if sp.re(purity) < -np.exp(-10):
+            if sp.re(purity) < -10**(-10):
                 logging.error("Purity isn't positive")
         except Exception as e:
             logging.error("Error occurred during eigenvalue checks", exc_info=True)
@@ -108,14 +118,14 @@ def compute(Omega):
         
         df_step = pd.DataFrame(result_full, columns=['V', '<0|0>', '<1|1>', '<2|2>', 'eigenvals', 'purity', 'additional params', 'startcond', 'Variances'])
         try:
-            lock = FileLock("results_test.pkl.lock")
+            lock = FileLock("test_0.pkl.lock")
             with lock:
-                if os.path.exists(f'results_test.pkl'):
-                    df_existing = pd.read_pickle(f'results_test.pkl')
+                if os.path.exists(f'test_0.pkl'):
+                    df_existing = pd.read_pickle(f'test_0.pkl')
                     df_combined = pd.concat([df_existing, df_step], ignore_index=True)
                 else:
                     df_combined = df_step
-                df_combined.to_pickle(f'results_test.pkl')
+                df_combined.to_pickle(f'test_0.pkl')
         except Exception as e:
             logging.error("Error occurred while saving results", exc_info=True)
         
@@ -131,12 +141,12 @@ if __name__ == '__main__':
 
     df_full_new = pd.DataFrame(results_flat, columns=['V', '<0|0>', '<1|1>', '<2|2>', 'eigenvals', 'purity', 'additional params', 'startcond', 'Variances'])
 
-    if os.path.exists('new_tests.pkl'):
-        df_full_existing = pd.read_pickle('new_tests.pkl')
+    if os.path.exists('test_1.pkl'):
+        df_full_existing = pd.read_pickle('test_1.pkl')
         df_full_combined = pd.concat([df_full_existing, df_full_new], ignore_index=True)       
     else:
         df_full_combined = df_full_new
     
-    df_full_combined.to_pickle('new_tests.pkl')
+    df_full_combined.to_pickle('test_1.pkl')
 
     print(f"Execution time: {time.time() - start_time} seconds")

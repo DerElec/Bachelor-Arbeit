@@ -58,14 +58,14 @@ for fixed_Omega in unique_Omega_values:
         variance_sums = variance_sums[sorted_indices]
 
         plt.figure(figsize=(10, 8))
-        #plt.plot(V_fixed_Omega, psi_00_fixed_Omega, 'o-', label='psi_00', linewidth=0)
+        plt.plot(V_fixed_Omega, psi_00_fixed_Omega, 'o-', label='psi_00', linewidth=0)
         plt.plot(V_fixed_Omega, psi_11_fixed_Omega, 's-', label='psi_11', linewidth=0)
-        #plt.plot(V_fixed_Omega, psi_22_fixed_Omega, '^-', label='psi_22', linewidth=0)
+        plt.plot(V_fixed_Omega, psi_22_fixed_Omega, '^-', label='psi_22', linewidth=0)
         #plt.plot(V_fixed_Omega, purity_fixed_Omega, 'x-', label='Purity', linewidth=0)
         #plt.plot(V_fixed_Omega, variance_sums, 'd-', label='Sum of Variances', linewidth=0)
         plt.xlabel('V')
         plt.ylabel('Values')
-        plt.title(f'Purity, Psi Values, and Sum of Variances over V for Omega = {fixed_Omega}')
+        plt.title(f'Psi Values over V for Omega = {fixed_Omega}')
         plt.legend()
         plt.grid(True)
         plt.show()
