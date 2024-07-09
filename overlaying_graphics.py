@@ -8,9 +8,9 @@ import seaborn as sns
 # df_full = pd.read_pickle("results_full_random_with_V.pkl")
 # df_full = pd.read_pickle("results_full_random_with_V_2_stationary.pkl")
 #df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
-df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
-
-
+#df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
+#df_full = pd.read_pickle("second_excited_dense.pkl")
+df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
 
 #df_full = pd.read_pickle("results_without_V_start_0.pkl")
 # Wähle die zu plottenden Datenpunkte aus
