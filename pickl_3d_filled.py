@@ -9,8 +9,13 @@ from matplotlib.colors import LogNorm
 #df_full = pd.read_pickle("results_without_V_start_0.pkl")
 #df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
 #df_full = pd.read_pickle("second_excited_dense.pkl")
+<<<<<<< HEAD
 #df_full = pd.read_pickle("Stationary_tests.pkl")
 df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
+=======
+df_full = pd.read_pickle("results_test.pkl")
+
+>>>>>>> 77e3618d16e64fad130c3e764b254b432f5c7d20
 
 
 
@@ -61,7 +66,11 @@ for i, v in enumerate(V_unique):
             for k in range(len(variances.iloc[indices[0]])):
                 variance_matrices[k][i, j] = get_real_value(variances.iloc[indices[0]][k])
 
+<<<<<<< HEAD
 def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', log_scale=False):
+=======
+def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', omega_lines=None):
+>>>>>>> 77e3618d16e64fad130c3e764b254b432f5c7d20
     plt.figure(figsize=(10, 8))
     if log_scale:
         ax = sns.heatmap(data, cmap=cmap, cbar_kws={'label': title}, norm=LogNorm())
@@ -79,12 +88,21 @@ def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis
     ax.set_yticks(np.linspace(0, len(V_unique) - 1, num_y_ticks))
     ax.set_yticklabels(np.round(np.linspace(V_unique.min(), V_unique.max(), num_y_ticks), 2))
 
+    if omega_lines:
+        for omega in omega_lines:
+            omega_idx = np.where(np.isclose(Omega_unique, omega))[0]
+            if omega_idx.size > 0:
+                plt.axvline(x=omega_idx[0], color='red', linewidth=2, linestyle='--')
+
     plt.show()
 
 # Plot each heatmap separately with phase transition line
-plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V')
-plot_heatmap_adjusted(heatmap_data_11, '<1|1>', 'Omega', 'V')
-plot_heatmap_adjusted(heatmap_data_22, '<2|2>', 'Omega', 'V')
+#omega_lines = [1, 3.4, 4, 10]
+omega_lines=False
+
+plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V', omega_lines=omega_lines)
+plot_heatmap_adjusted(heatmap_data_11, '<1|1>', 'Omega', 'V', omega_lines=omega_lines)
+plot_heatmap_adjusted(heatmap_data_22, '<2|2>', 'Omega', 'V', omega_lines=omega_lines)
 plot_heatmap_adjusted(heatmap_data_purity, 'Purity', 'Omega', 'V')
 
 # Plot variances heatmap with logarithmic scale
@@ -150,7 +168,6 @@ plot_heatmap_delta2(heatmap_data_purity_delta2, 'Purity over Omega and Delta_2',
 
 unique_Omega_values = np.unique(Omega)
 print("Verfügbare Omega-Werte:", unique_Omega_values)
-
 # Plot Purity and psi_22 over V for all unique Omega values
 for fixed_Omega in unique_Omega_values:
     indices_fixed_Omega = np.where(Omega == fixed_Omega)[0]

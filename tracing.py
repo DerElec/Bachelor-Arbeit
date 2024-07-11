@@ -93,7 +93,7 @@ def calculate_avrg(Averiging_rate,sol_00,sol_11,sol_22):
     one_vals=sol_11[-Averiging_rate:]
     two_vals=sol_22[-Averiging_rate:]
     integral_00 = np.trapz(zero_vals)/Averiging_rate
-    print(integral_00)
+    #print(integral_00)
     integral_11 = np.trapz(one_vals)/Averiging_rate
     integral_22 = np.trapz(two_vals)/Averiging_rate
     

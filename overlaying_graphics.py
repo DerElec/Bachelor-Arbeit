@@ -8,13 +8,21 @@ import seaborn as sns
 # df_full = pd.read_pickle("results_full_random_with_V.pkl")
 # df_full = pd.read_pickle("results_full_random_with_V_2_stationary.pkl")
 #df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
+<<<<<<< HEAD
 #df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
 #df_full = pd.read_pickle("second_excited_dense.pkl")
 df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
+=======
+df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
+#df_full = pd.read_pickle("second_excited_dense.pkl")
+
+
+>>>>>>> 77e3618d16e64fad130c3e764b254b432f5c7d20
 
 #df_full = pd.read_pickle("results_without_V_start_0.pkl")
 # Wähle die zu plottenden Datenpunkte aus
-V = df_full['V'].to_numpy()
+df_filtered = df_full[df_full['V'] < 0]
+V = df_filtered['V'].to_numpy()
 purity = df_full['purity'].to_numpy()
 variances = df_full['Variances']
 values = df_full['additional params'].to_numpy()

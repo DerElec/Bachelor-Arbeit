@@ -84,8 +84,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         
         psi02 = np.conj(psi20)
 
-        #psi02 = (4 * eta * gamma / (Omega * kappa) * (delta_2 / (2 * V) + 1))#np.conj(psi20 )
-        #psi20 = np.conj(psi02)
+        
         psi10 = 0.0 + 0j
         psi01 = 0.0 + 0j
         psi21=0.0+0j

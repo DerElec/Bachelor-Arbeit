@@ -19,18 +19,28 @@ counter=0
 for Omega in np.arange(0.1,12,0.1):
     for V in np.arange(-8,-0.1,0.1):
 
-        a = -2 * eta / kappa + 0j
-        a_dagger = -2 * eta / kappa + 0j
-        psi00 = (Delta_2 / (2 * V) + 1)
+        # a = -2 * eta / kappa + 0j
+        # a_dagger = -2 * eta / kappa + 0j
+        # psi00 = (Delta_2 / (2 * V) + 1)
+        # psi11 = 0 + 0j
+        # psi22 = -Delta_2 / (2 * V)
+        # psi20 = -(Omega * kappa * Delta_2 / (8 * eta * gamma * V))
+        # psi02 = np.conj(psi20)
+        # psi10 = 0.0 + 0j
+        # psi01 = 0.0 + 0j
+        # psi21 = 0.0 + 0j
+        # psi12 = 0.0 + 0j
+        a = 0
+        a_dagger = 0
+        psi00 = 0
         psi11 = 0 + 0j
-        psi22 = -Delta_2 / (2 * V)
-        psi20 = -(Omega * kappa * Delta_2 / (8 * eta * gamma * V))
-        psi02 = np.conj(psi20)
+        psi22 = 1
+        psi20 = 0
+        psi02 = 0
         psi10 = 0.0 + 0j
         psi01 = 0.0 + 0j
         psi21 = 0.0 + 0j
         psi12 = 0.0 + 0j
-        
         
         if np.round(psi20)!= np.round(psi02):
             print(psi02,psi20)

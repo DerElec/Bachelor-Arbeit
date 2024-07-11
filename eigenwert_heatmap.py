@@ -18,24 +18,30 @@ g_0 = 1
 Delta_2 = 1
 
 Omega_values = np.arange(0.1, 12, 0.1)
-V_values = np.arange(-8, -0.1, 0.01)
+V_values = np.arange(-8, -0.5, 0.01)
 Omega_grid, V_grid = np.meshgrid(Omega_values, V_values)
 positive_eigenvalues_count = np.zeros_like(Omega_grid)
 problematic_eigenvalues = np.zeros_like(Omega_grid)
 
 for i, Omega in enumerate(Omega_values):
     for j, V in enumerate(V_values):
-        a = -2 * eta / kappa + 0j
-        a_dagger = -2 * eta / kappa + 0j
-        psi00 = (Delta_2 / (2 * V) + 1)
-        psi11 = 0 + 0j
-        psi22 = -Delta_2 / (2 * V)
-        psi20 = -(Omega * kappa * Delta_2 / (8 * eta * gamma * V))
-        psi02 = np.conj(psi20)
-        psi10 = 0.0 + 0j
-        psi01 = 0.0 + 0j
-        psi21 = 0.0 + 0j
-        psi12 = 0.0 + 0j
+        # a = -2 * eta / kappa + 0j
+        # a_dagger = -2 * eta / kappa + 0j
+        # psi00 = (Delta_2 / (2 * V) + 1)
+        # psi11 = 0 + 0j
+        # psi22 = -Delta_2 / (2 * V)
+        # V_cond= -Delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
+
+        # if V<V_cond:    
+        #     psi20 = -(Omega * kappa * Delta_2 / (8 * eta * gamma * V))
+        #     psi02 = np.conj(psi20)
+        # else:
+        #     psi02 = (4 * eta * gamma / (Omega * kappa) * (Delta_2 / (2 * V) + 1))#np.conj(psi20 )
+        #     psi20 = np.conj(psi02)
+        # psi10 = 0.0 + 0j
+        # psi01 = 0.0 + 0j
+        # psi21 = 0.0 + 0j
+        # psi12 = 0.0 + 0j
         
         ####################
         # a = 0
@@ -49,17 +55,40 @@ for i, Omega in enumerate(Omega_values):
         # psi01 = 0.0 + 0j
         # psi21 = 0.0 + 0j
         # psi12 = 0.0 + 0j
-        
-        
-        
+        ########################
+        a = 0
+        a_dagger = 0
+        ##############################################
+        # psi00 = 0.16884275124707740+0.00000000000000000j
+        # psi01 = 0.05285495678456895+0.06126674337862835j
+        # psi02 = 0.00893939129055982+0.12284872741208981j
+        # psi10 = 0.05285495678456896-0.06126674337862835j
+        # psi11 = 0.49539487582407621-0.00000000000000000j
+        # psi12 = -0.09613467423691810+0.02460639371916040j
+        # psi20 = 0.00893939129055981-0.12284872741208981j
+        # psi21 = -0.09613467423691806-0.02460639371916042j
+        # psi22 = 0.33576237292884648+0.00000000000000000j
+        #####################################
+        psi00 = 0.42004291175716757-0.00000000000000000j
+        psi01 = -0.00129269880313136-0.02430937710709920j
+        psi02 = 0.00679350037220931-0.09547257190626260j
+        psi10 = -0.00129269880313136+0.02430937710709921j
+        psi11 = 0.52040871362966168+0.00000000000000000j
+        psi12 = -0.08027973365285912-0.01822614412039732j
+        psi20 = 0.00679350037220931+0.09547257190626257j
+        psi21 = -0.08027973365285912+0.01822614412039732j
+        psi22 = 0.05954837461317056-0.00000000000000000j
+                
 
         rho_stationary = np.array([
-            [psi00, psi20],
-            [psi02, psi22],
+            [psi00, psi10,psi20],
+            [psi01, psi11,psi21],
+            [psi02,psi12, psi22],
         ])
         eigenvals_rho = np.linalg.eigvals(rho_stationary)
         if np.trace(rho_stationary) != 1:
-            print("error not correct trace")
+            print(np.trace(rho_stationary))
+            #print("error not correct trace")
         for ev in eigenvals_rho:
             if np.real(ev) < -10**(-12):
                 #print(f"Problematic, eigenvalue is {ev}")
