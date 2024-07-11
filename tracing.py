@@ -8,79 +8,6 @@ import sympy as sp
 import numpy as np
 
 
-kappa = 1#cavity loss rate0
-gamma = 2 #rate from cavity and atom coupling
-Gamma = 2 #Decay rate from first excited state to ground
-#Omega = 3 #Laser atom coupling constant
-#Omega = 1.5 #Laser atom coupling constant
-delta_1 = 90 #Detuning between first excited state and cavity-Pump detuning
-delta_2 = 2 #Detuning between second excited state and Laser-Pump detuning (Pump meaning the pumping field )
-eta=1
-Omega=3
-
-#V = 0.2 #Atom-Atom coupling constant
-#V=-delta_2*((Omega*kappa/(4*eta*gamma))**2+1)/2
-
-V=-50
-#Random testing
-a0= 1
-a_dagger_0=1
-psi00 = 0
-psi11 = 0.0 + 0j
-psi22 = 1
-psi20 = 0
-psi02 = 2
-psi10 = 1.0 + 0j
-psi01 = 0.0 + 0j
-psi21=0.0+0j
-psi12=-1+0j
-####################################
-#Stationary state# perturbed
-# eps=0.05
-# other=1-eps
-# a0= -2*eta/kappa+0j
-# a_dagger_0=-2*eta/kappa+0j
-# psi00 = other*(delta_2/(2*V)+1)+eps/2
-# psi11 = 0 +0j
-# psi22 = -other*delta_2/(2*V)+eps/2
-# psi20 = other*(-Omega*kappa*delta_2/(8*eta*gamma*V))
-# psi02 = other*(4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
-# psi10 = 0.0 + 0j
-# psi01 = 0.0 + 0j
-# psi21=0.0+0j
-# psi12=0.0+0j
-#####################################
-#Stationary state# unperturbed
-# a0= -2*eta/kappa+0j
-# a_dagger_0=-2*eta/kappa+0j
-# psi00 = (delta_2/(2*V)+1)
-# psi11 = 0 +0j
-# psi22 = -delta_2/(2*V)
-# psi20 = (-Omega*kappa*delta_2/(8*eta*gamma*V))
-# psi02 = (4*eta*gamma/(Omega*kappa)*(delta_2/(2*V)+1))
-# psi10 = 0.0 + 0j
-# psi01 = 0.0 + 0j
-# psi21=0.0+0j
-# psi12=0.0+0j
-
-
-psi00*psi00
-
-
-
-# Define symbolic placeholders for the wavefunction components
-psi00_sym = sp.symbols('psi00')
-psi22_sym = sp.symbols('psi22')
-psi20_sym = sp.symbols('psi20')
-psi02_sym = sp.symbols('psi02')
-
-# Assign values to the placeholders
-psi00_val = psi00
-psi22_val = psi22
-psi20_val = psi20
-psi02_val = psi02
-
-
 
 def get_trace_eigenvals(matrix):
     eigenvals=matrix.eigenvals()
@@ -88,51 +15,36 @@ def get_trace_eigenvals(matrix):
     trace=squared_matrix.trace().evalf()
     return trace,eigenvals
 
-def calculate_avrg(Averiging_rate,sol_00,sol_11,sol_22):
+def calculate_avrg(Averiging_rate,sol_00,sol_11,sol_22,t_last_x_values):
     zero_vals = sol_00[-Averiging_rate:]
     one_vals=sol_11[-Averiging_rate:]
     two_vals=sol_22[-Averiging_rate:]
-    integral_00 = np.trapz(zero_vals)/Averiging_rate
+    # Compute the time interval T(x)
+    T_x = t_last_x_values[-1] - t_last_x_values[0]
+    integral_00 = np.trapz(zero_vals,t_last_x_values)/ T_x 
     #print(integral_00)
-    integral_11 = np.trapz(one_vals)/Averiging_rate
-    integral_22 = np.trapz(two_vals)/Averiging_rate
+    integral_11 = np.trapz(one_vals,t_last_x_values)/ T_x 
+    integral_22 = np.trapz(two_vals,t_last_x_values)/ T_x 
     
     averaged_vals=[integral_00 ,integral_11 ,integral_22]
     return averaged_vals
 
-def calculate_variance(Averiging_rate,sol_00,sol_11,sol_22,averaged_vals):
+def calculate_variance(Averiging_rate,sol_00,sol_11,sol_22,averaged_vals,t_last_x_values):
     integral_00 ,integral_11 ,integral_22=averaged_vals
     zero_vals = sol_00[-Averiging_rate:]
     one_vals=sol_11[-Averiging_rate:]
     two_vals=sol_22[-Averiging_rate:]
-    zero_vals = sol_00[-Averiging_rate:]
-    one_vals=sol_11[-Averiging_rate:]
-    two_vals=sol_22[-Averiging_rate:]
+    # zero_vals = sol_00[-Averiging_rate:]
+    # one_vals=sol_11[-Averiging_rate:]
+    # two_vals=sol_22[-Averiging_rate:]
     
     zero_integrand=(zero_vals-integral_00)**2
     one_integrand=(one_vals-integral_11)**2
     two_integrand=(two_vals-integral_22)**2
     
-    
-    var_00 = np.trapz(zero_integrand)/Averiging_rate
-    var_11 = np.trapz(one_integrand)/Averiging_rate
-    var_22 = np.trapz(two_integrand)/Averiging_rate
+    T_x = t_last_x_values[-1] - t_last_x_values[0]
+    var_00 = np.trapz(zero_integrand,t_last_x_values)/T_x
+    var_11 = np.trapz(one_integrand,t_last_x_values)/T_x
+    var_22 = np.trapz(two_integrand,t_last_x_values)/T_x
     variances=[var_00,var_11,var_22]
     return variances
-
-
-
-
-# # Calculate eigenvalues
-# eigenvalues = rho_stationary.eigenvals()
-
-# # Calculate rho^2
-# rho_squared_stationary = rho_stationary * rho_stationary
-
-
-# # Calculate the trace of rho^2
-# trace_rho_squared_stationary = rho_squared_stationary.trace()
-
-# Display the trace
-#for i in rho_stationary.eigenvals()
-
