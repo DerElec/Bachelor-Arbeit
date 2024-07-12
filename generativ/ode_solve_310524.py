@@ -6,9 +6,9 @@ import pandas as pd
 import sympy as sp
 import os
 import tracing as tr
-Omega_start = 0.1
+Omega_start = 6
 Omega_end = 12
-Omega_step = 0.1
+Omega_step = 1000
 
 Delta_start = 1
 Delta_end = 4
@@ -34,7 +34,7 @@ results = []
 results_full = []
 
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    for V in np.arange(-8, -0.5, 0.1):
+    for V in np.arange(-4, -0.5, 111):
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
         Gamma = 2  # Decay rate from first excited state to ground
@@ -68,27 +68,38 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
             sol = solve_ivp(dydt, (0, T), y0, t_eval=t_eval, method='DOP853', rtol=1e-13, atol=1e-16)
             return sol
 
-        def get_constants(kappa, gamma, Omega, eta):
-            c_1 = (-Omega * kappa) / (4 * eta * gamma) * np.sqrt(1 / ((Omega**2 * kappa**2) / (16 * eta**2 * gamma**2) + 1))
-            c_2 = np.sqrt(1 - c_1 * np.conj(c_1))
-            return c_1, c_2
-            
-        c_1, c_2 = get_constants(kappa, gamma, Omega, eta)
-        
-        a0= -2*eta/kappa+0j
-        a_dagger_0=-2*eta/kappa+0j
-        psi00 = (delta_2/(2*V)+1)
-        psi11 = 0 +0j
-        psi22 = -delta_2/(2*V)
-        psi20 = -(Omega*kappa*delta_2/(8*eta*gamma*V))
-        
-        psi02 = np.conj(psi20)
 
         
+        
+        
+        
+        
+        
+        #stationary state
+        #V=-delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
+        a0 = 2 * eta / kappa + 0j
+        a_dagger_0 = 2 * eta / kappa + 0j
+        psi00 = (delta_2 / (2 * V) + 1)
+        
+        psi22 = -delta_2 / (2 * V)
+        
+        V_cond= -delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
+
+        if V<V_cond:    
+            psi20 = (Omega * kappa * delta_2 / (8 * eta * gamma * V))
+            psi02 = np.conj(psi20)
+        else:
+            psi02 = -(4 * eta * gamma / (Omega * kappa) * (delta_2 / (2 * V) + 1))#np.conj(psi20 )
+            psi20 = np.conj(psi02)
+        
+        psi11 = 0 + 0j
         psi10 = 0.0 + 0j
         psi01 = 0.0 + 0j
-        psi21=0.0+0j
-        psi12=0.0+0j
+        psi21 = 0.0 + 0j
+        psi12 = 0.0 + 0j
+        
+        
+        ##########################
         
         # a0= 0
         # a_dagger_0=0
@@ -129,6 +140,13 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         plt.plot(sol.t, sol.y[5].real, label='<1|1>')
         plt.plot(sol.t, sol.y[6].real, label='<2|2>')
         
+        # plt.plot(sol.t, sol.y[2].imag, label='<0|0> im')
+        # plt.plot(sol.t, sol.y[5].imag, label='<1|1> im')
+        # plt.plot(sol.t, sol.y[6].imag, label='<2|2> im')
+        
+        
+        
+        
         plt.plot(sol.t, (sol.y[2] + sol.y[5] + sol.y[6]).real)
         
         plt.xlabel('Time in arbitrary units')
@@ -152,9 +170,10 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
                 print(f"Problematic, eigenvalue is {i}")
                 break
         
-        Averiging_rate = 50
-        averaged_vals = tr.calculate_avrg(Averiging_rate, sol.y[2], sol.y[5], sol.y[6])
-        variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals)
+        Averiging_rate = 500
+        t_last_x_values = sol.t[-Averiging_rate:]
+        averaged_vals = tr.calculate_avrg(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], t_last_x_values)
+        variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals, t_last_x_values)
         
         results_full.append([V] + averaged_vals + [eigenvals] + [trace] + [vals] + [startcond] + [variances])
         

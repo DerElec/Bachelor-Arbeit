@@ -4,20 +4,22 @@ import sympy as sp
 import numpy as np
 import seaborn as sns
 from matplotlib.colors import LogNorm
+import os
 
-#df_full = pd.read_pickle("results_full_random_without_V_with_delta.pkl")
-#df_full = pd.read_pickle("results_without_V_start_0.pkl")
-#df_full = pd.read_pickle("results_without_V_start_0_dense.pkl")
-#df_full = pd.read_pickle("second_excited_dense.pkl")
-<<<<<<< HEAD
-#df_full = pd.read_pickle("Stationary_tests.pkl")
-df_full = pd.read_pickle("results_full_random_without_V_2.pkl")
-=======
-df_full = pd.read_pickle("results_test.pkl")
+# Parameter zum Steuern der Plotausgabe
+show_plots = False
 
->>>>>>> 77e3618d16e64fad130c3e764b254b432f5c7d20
+# Dateipfad zu den Daten
+data_file_path = r"D:\Daten\Uni\Bachelor_Arbeit_old\daten\results_full_random_with_V_2_stationary.pkl"
+df_full = pd.read_pickle(data_file_path)
 
+# Extrahiere den Dateinamen ohne Erweiterung für den Ordnernamen
+data_filename = os.path.splitext(os.path.basename(data_file_path))[0]
+output_directory = os.path.join(os.path.dirname(data_file_path), data_filename)
 
+# Erstelle den Ordner, falls er nicht existiert
+if not show_plots and not os.path.exists(output_directory):
+    os.makedirs(output_directory)
 
 # Wähle die zu plottenden Datenpunkte aus und filtere V > 0
 df_filtered = df_full[df_full['V'] < 0]
@@ -66,11 +68,7 @@ for i, v in enumerate(V_unique):
             for k in range(len(variances.iloc[indices[0]])):
                 variance_matrices[k][i, j] = get_real_value(variances.iloc[indices[0]][k])
 
-<<<<<<< HEAD
-def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', log_scale=False):
-=======
-def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', omega_lines=None):
->>>>>>> 77e3618d16e64fad130c3e764b254b432f5c7d20
+def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', omega_lines=None, log_scale=False, save_path=None):
     plt.figure(figsize=(10, 8))
     if log_scale:
         ax = sns.heatmap(data, cmap=cmap, cbar_kws={'label': title}, norm=LogNorm())
@@ -94,23 +92,31 @@ def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis
             if omega_idx.size > 0:
                 plt.axvline(x=omega_idx[0], color='red', linewidth=2, linestyle='--')
 
-    plt.show()
+    if show_plots:
+        plt.show()
+    else:
+        plt.savefig(save_path)
+        plt.close()
 
 # Plot each heatmap separately with phase transition line
-#omega_lines = [1, 3.4, 4, 10]
-omega_lines=False
+omega_lines = False
 
-plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V', omega_lines=omega_lines)
-plot_heatmap_adjusted(heatmap_data_11, '<1|1>', 'Omega', 'V', omega_lines=omega_lines)
-plot_heatmap_adjusted(heatmap_data_22, '<2|2>', 'Omega', 'V', omega_lines=omega_lines)
-plot_heatmap_adjusted(heatmap_data_purity, 'Purity', 'Omega', 'V')
+plot_heatmap_adjusted(heatmap_data_00, '<0|0>', 'Omega', 'V', omega_lines=omega_lines,
+                      save_path=os.path.join(output_directory, '<0|0>.png'))
+plot_heatmap_adjusted(heatmap_data_11, '<1|1>', 'Omega', 'V', omega_lines=omega_lines,
+                      save_path=os.path.join(output_directory, '<1|1>.png'))
+plot_heatmap_adjusted(heatmap_data_22, '<2|2>', 'Omega', 'V', omega_lines=omega_lines,
+                      save_path=os.path.join(output_directory, '<2|2>.png'))
+plot_heatmap_adjusted(heatmap_data_purity, 'Purity', 'Omega', 'V',
+                      save_path=os.path.join(output_directory, 'Purity.png'))
 
 # Plot variances heatmap with logarithmic scale
 for i, variance_matrix in enumerate(variance_matrices):
-    plot_heatmap_adjusted(variance_matrix, f'Variance {i + 1}', 'Omega', 'V', log_scale=True)
+    plot_heatmap_adjusted(variance_matrix, f'Variance {i + 1}', 'Omega', 'V', log_scale=True,
+                          save_path=os.path.join(output_directory, f'Variance_{i + 1}.png'))
 
 # 2D plot of variance over V
-variance_over_V = [get_real_value(variance[0])+get_real_value(variance[1])+get_real_value(variance[2]) for variance in variances]
+variance_over_V = [get_real_value(variance[0]) + get_real_value(variance[1]) + get_real_value(variance[2]) for variance in variances]
 
 plt.figure(figsize=(10, 8))
 plt.plot(V, variance_over_V, 'o-', linewidth=0)
@@ -118,10 +124,14 @@ plt.xlabel('V')
 plt.ylabel('Variances sum')
 plt.title('Variance over V')
 plt.grid(True)
-plt.show()
+if show_plots:
+    plt.show()
+else:
+    plt.savefig(os.path.join(output_directory, 'Variance_over_V.png'))
+    plt.close()
 
 # 2D plot of variance over Omega
-variance_over_Omega = [get_real_value(variance[0])+get_real_value(variance[1])+get_real_value(variance[2]) for variance in variances]
+variance_over_Omega = [get_real_value(variance[0]) + get_real_value(variance[1]) + get_real_value(variance[2]) for variance in variances]
 
 plt.figure(figsize=(10, 8))
 plt.plot(Omega, variance_over_Omega, 'o', linewidth=0)
@@ -129,12 +139,16 @@ plt.xlabel('Omega')
 plt.ylabel('Variances sum')
 plt.title('Variance over Omega')
 plt.grid(True)
-plt.show()
+if show_plots:
+    plt.show()
+else:
+    plt.savefig(os.path.join(output_directory, 'Variance_over_Omega.png'))
+    plt.close()
 
 # 2D plot for purity over Omega and Delta_2
 heatmap_data_purity_delta2 = np.full((len(delta_2_unique), len(Omega_unique)), np.nan)
 
-def plot_heatmap_delta2(data, title, xlabel='Omega', ylabel='Delta_2', cmap='viridis', phase_transition=None, log_scale=False):
+def plot_heatmap_delta2(data, title, xlabel='Omega', ylabel='Delta_2', cmap='viridis', phase_transition=None, log_scale=False, save_path=None):
     plt.figure(figsize=(10, 8))
     if log_scale:
         ax = sns.heatmap(data, cmap=cmap, cbar_kws={'label': title}, norm=LogNorm())
@@ -155,7 +169,11 @@ def plot_heatmap_delta2(data, title, xlabel='Omega', ylabel='Delta_2', cmap='vir
     if phase_transition:
         plt.axhline(y=phase_transition, color='red', linewidth=2, linestyle='--')
 
-    plt.show()
+    if show_plots:
+        plt.show()
+    else:
+        plt.savefig(save_path)
+        plt.close()
 
 # Fill the new matrix
 for i, d in enumerate(delta_2_unique):
@@ -164,10 +182,12 @@ for i, d in enumerate(delta_2_unique):
         if indices.size > 0:
             heatmap_data_purity_delta2[i, j] = get_real_value(purity[indices][0])
 
-plot_heatmap_delta2(heatmap_data_purity_delta2, 'Purity over Omega and Delta_2', 'Omega', 'Delta_2')
+plot_heatmap_delta2(heatmap_data_purity_delta2, 'Purity over Omega and Delta_2', 'Omega', 'Delta_2',
+                    save_path=os.path.join(output_directory, 'Purity_over_Omega_and_Delta_2.png'))
 
 unique_Omega_values = np.unique(Omega)
 print("Verfügbare Omega-Werte:", unique_Omega_values)
+
 # Plot Purity and psi_22 over V for all unique Omega values
 for fixed_Omega in unique_Omega_values:
     indices_fixed_Omega = np.where(Omega == fixed_Omega)[0]
@@ -185,4 +205,8 @@ for fixed_Omega in unique_Omega_values:
         plt.title(f'Purity and psi_22 over V for Omega = {fixed_Omega}')
         plt.legend()
         plt.grid(True)
-        plt.show()
+        if show_plots:
+            plt.show()
+        else:
+            plt.savefig(os.path.join(output_directory, f'Purity_and_psi_22_over_V_for_Omega_{fixed_Omega}.png'))
+            plt.close()
