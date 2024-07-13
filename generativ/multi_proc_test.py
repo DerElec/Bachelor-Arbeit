@@ -28,7 +28,7 @@ def is_density_matrix_physical(rho):
 
 def compute(eta):
     result_full = []
-    for V in np.arange(-8, -0.1, 0.1): 
+    for V in np.arange(-8, -0.1, 0.01): 
         delta_2 = 1
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling

@@ -10,7 +10,12 @@ import os
 show_plots = False
 
 # Dateipfad zu den Daten
-data_file_path = r"D:\Daten\Uni\Bachelor_Arbeit_old\daten\results_full_random_with_V_2_stationary.pkl"
+#data_file_path = r"D:\Daten\Uni\Bachelor_Arbeit_old\daten\results_full_random_with_V_2_stationary.pkl"
+
+data_file_path =r"D:\Daten\Uni\Bachelor_Arbeit_old\generativ\eta.pkl"
+
+
+
 df_full = pd.read_pickle(data_file_path)
 
 # Extrahiere den Dateinamen ohne Erweiterung für den Ordnernamen

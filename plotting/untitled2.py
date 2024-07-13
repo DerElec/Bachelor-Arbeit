@@ -5,7 +5,9 @@ import numpy as np
 import seaborn as sns
 
 # Load the file
-df_full = pd.read_pickle(r"D:\Daten\Uni\Bachelor_Arbeit_old\eta.pkl")
+#df_full = pd.read_pickle(r"D:\Daten\Uni\Bachelor_Arbeit_old\eta.pkl")
+df_full =pd.read_pickle(r"D:\Daten\Uni\Bachelor_Arbeit_old\generativ\eta.pkl")
+
 
 # Select data points for plotting
 df_filtered = df_full[df_full['V'] < 0]
