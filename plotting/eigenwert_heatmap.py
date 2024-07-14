@@ -8,6 +8,8 @@ Created on Sun Jun  2 18:37:54 2024
 import numpy as np
 import matplotlib.pyplot as plt
 import sympy as sp
+import pandas as pd 
+
 
 kappa = 1  # cavity loss rate
 gamma = 1  # rate from cavity and atom coupling
@@ -17,14 +19,41 @@ eta = 1
 g_0 = 1
 Delta_2 = 1
 
-Omega_values = np.arange(0.1, 12, 0.1)
+Omega_values = np.arange(12, 13, 100)
 V_values = np.arange(-8, -0.5, 0.01)
 Omega_grid, V_grid = np.meshgrid(Omega_values, V_values)
 positive_eigenvalues_count = np.zeros_like(Omega_grid)
 problematic_eigenvalues = np.zeros_like(Omega_grid)
 
 for i, Omega in enumerate(Omega_values):
-    for j, V in enumerate(V_values):
+    #for j, V in enumerate(V_values):
+        
+        df_full = pd.read_pickle(r"D:\Daten\Uni\Bachelor_Arbeit_old\daten\results_full_random_without_V_3.pkl")
+
+
+        # Select data points for plotting
+        df_filtered = df_full[df_full['V'] < 0]
+        V = df_filtered['V'].to_numpy()
+        purity = df_filtered['purity'].to_numpy()
+        variances = df_filtered['Variances']
+        values = df_filtered['additional params'].to_numpy()
+
+        # Extract parameters from 'additional params'
+        kappa = np.array([params[0] for params in values])
+        gamma = np.array([params[1] for params in values])
+        Omega = np.array([params[3] for params in values])
+        delta_2 = np.array([params[5] for params in values])
+        eta = np.array([params[6] for params in values])
+        V_vals = np.array([params[7] for params in values])
+
+        # Use the first value of kappa, gamma, Omega, delta_2
+        Omega = Omega[0]
+        delta_2 = delta_2[0]
+        kappa = kappa[0]
+        gamma=gamma[0]
+        
+        
+        
         a = 2 * eta / kappa + 0j
         a_dagger = 2 * eta / kappa + 0j
         psi00 = (Delta_2 / (2 * V) + 1)
@@ -46,42 +75,7 @@ for i, Omega in enumerate(Omega_values):
         psi21 = 0.0 + 0j
         psi12 = 0.0 + 0j
         
-        ####################
-        # a = 0
-        # a_dagger = 0
-        # psi00 = 0
-        # psi11 = 0 + 0j
-        # psi22 = 1
-        # psi20 = 0
-        # psi02 = 0
-        # psi10 = 0.0 + 0j
-        # psi01 = 0.0 + 0j
-        # psi21 = 0.0 + 0j
-        # psi12 = 0.0 + 0j
-        ########################
-        # a = 0
-        # a_dagger = 0
-        ##############################################
-        # psi00 = 0.16884275124707740+0.00000000000000000j
-        # psi01 = 0.05285495678456895+0.06126674337862835j
-        # psi02 = 0.00893939129055982+0.12284872741208981j
-        # psi10 = 0.05285495678456896-0.06126674337862835j
-        # psi11 = 0.49539487582407621-0.00000000000000000j
-        # psi12 = -0.09613467423691810+0.02460639371916040j
-        # psi20 = 0.00893939129055981-0.12284872741208981j
-        # psi21 = -0.09613467423691806-0.02460639371916042j
-        # psi22 = 0.33576237292884648+0.00000000000000000j
-        #####################################
-        # psi00 = 0.42004291175716757-0.00000000000000000j
-        # psi01 = -0.00129269880313136-0.02430937710709920j
-        # psi02 = 0.00679350037220931-0.09547257190626260j
-        # psi10 = -0.00129269880313136+0.02430937710709921j
-        # psi11 = 0.52040871362966168+0.00000000000000000j
-        # psi12 = -0.08027973365285912-0.01822614412039732j
-        # psi20 = 0.00679350037220931+0.09547257190626257j
-        # psi21 = -0.08027973365285912+0.01822614412039732j
-        # psi22 = 0.05954837461317056-0.00000000000000000j
-                
+
 
         rho_stationary = np.array([
             [psi00, psi10,psi20],

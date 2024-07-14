@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Jul 13 11:05:11 2024
+
+@author: holli
+"""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import sympy as sp

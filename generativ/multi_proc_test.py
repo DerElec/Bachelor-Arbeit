@@ -12,8 +12,8 @@ import tracing as tr
 
 logging.basicConfig(filename='error.log', level=logging.ERROR)
 
-Omega_start = 1
-Omega_end = 10
+Omega_start = 0
+Omega_end = 12
 Omega_step = 0.1
 
 def is_positive_semidefinite(matrix):
@@ -26,16 +26,15 @@ def is_density_matrix_physical(rho):
     positive_semidefinite = is_positive_semidefinite(rho)
     return trace_one and positive_semidefinite
 
-def compute(eta):
+def compute(Omega):
     result_full = []
-    for V in np.arange(-8, -0.1, 0.01): 
+    for V in np.arange(-8, -0.01, 0.01): 
         delta_2 = 1
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
         Gamma = 2  # Decay rate from first excited state to ground
         delta_1 = 1  # Detuning between first excited state and cavity-Pump detuning
-        Omega = 1
-        
+        eta = 1
         vals = [kappa, gamma, Gamma, Omega, delta_1, delta_2, eta, V]
         T = 20000  # Time 
         T_auflösung = 100 * T  # this gives how many datapoints are between 0 and T or in other words resolution
@@ -61,18 +60,26 @@ def compute(eta):
 
             return [da_dt, da_dagger_dt, dket00_dt, dket01_dt, dket10_dt, dket11_dt, dket22_dt, dket21_dt, dket12_dt, dket20_dt, dket02_dt]
 
-        a0 = 0
-        a_dagger_0 = 0
-        psi00 = 0
-        psi11 = 0.0 + 0j
-        psi22 = 1
-        psi20 = 0
-        psi02 = 0
+        a0 = 2 * eta / kappa + 0j
+        a_dagger_0 = 2 * eta / kappa + 0j
+        psi00 = (delta_2 / (2 * V) + 1)
+        psi22 = -delta_2 / (2 * V)
+        
+        V_cond = -delta_2 / 2 * ((Omega * kappa)**2 / (16 * (eta * gamma)**2) + 1)
+
+        if V < V_cond:    
+            psi20 = (Omega * kappa * delta_2 / (8 * eta * gamma * V))
+            psi02 = np.conj(psi20)
+        else:
+            psi02 = -(4 * eta * gamma / (Omega * kappa) * (delta_2 / (2 * V) + 1)) # np.conj(psi20 )
+            psi20 = np.conj(psi02)
+        
+        psi11 = 0 + 0j
         psi10 = 0.0 + 0j
         psi01 = 0.0 + 0j
         psi21 = 0.0 + 0j
         psi12 = 0.0 + 0j
-
+        
         startcond = [a0, a_dagger_0, psi00, psi01, psi02, psi10, psi11, psi12, psi20, psi21, psi22]
         
         rho_start = np.array([
@@ -118,21 +125,29 @@ def compute(eta):
             logging.error("Error occurred during eigenvalue checks", exc_info=True)
 
         Averiging_rate = 500
-        t_last_x_values = sol.t[-Averiging_rate:]
-        averaged_vals = tr.calculate_avrg(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], t_last_x_values)
-        variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals, t_last_x_values)
-        result_full.append([V] + averaged_vals + [eigenvals] + [purity] + [vals] + [startcond] + [variances])
         
-        df_step = pd.DataFrame(result_full, columns=['V', '<0|0>', '<1|1>', '<2|2>', 'eigenvals', 'purity', 'additional params', 'startcond', 'Variances'])
+        t_last_x_values = sol.t[-Averiging_rate:]
+      
+        #<0|0>,<1|1>,<2|2>,<0|1>,<1|0>,<0|2>,<2|0>,<1|2>,<2|1>,a,a_dagger
+        array_of_sols = [sol.y[2], sol.y[5], sol.y[6], sol.y[3], sol.y[4], sol.y[10], sol.y[9], sol.y[8], sol.y[7], sol.y[0], sol.y[1]]
+        
+        averaged_array, variance_array = tr.calculate_avrg_vars(Averiging_rate, array_of_sols, t_last_x_values)
+
+        result_full.append([V] + averaged_array + [eigenvals] + [purity] + [vals] + [startcond] + variance_array)
+        
+        df_step = pd.DataFrame(result_full, columns=['V', '<0|0>', '<1|1>', '<2|2>','<0|1>','<1|0>','<0|2>','<2|0>','<1|2>','<2|1>','a','a_dagger',
+                                                     'eigenvals', 'purity', 'additional params', 'startcond', 
+                                                     'var_<0|0>', 'var_<1|1>', 'var_<2|2>','var_<0|1>','var_<1|0>','var_<0|2>','var_<2|0>','var_<1|2>','var_<2|1>','var_a','var_a_dagger',]
+                               )
         try:
-            lock = FileLock("eta.pkl.lock")
+            lock = FileLock("stationary_140724.pkl.lock")
             with lock:
-                if os.path.exists(f'eta.pkl'):
-                    df_existing = pd.read_pickle(f'eta.pkl')
+                if os.path.exists(f'stationary_140724.pkl'):
+                    df_existing = pd.read_pickle(f'stationary_140724.pkl')
                     df_combined = pd.concat([df_existing, df_step], ignore_index=True)
                 else:
                     df_combined = df_step
-                df_combined.to_pickle(f'eta.pkl')
+                df_combined.to_pickle(f'stationary_140724.pkl')
         except Exception as e:
             logging.error("Error occurred while saving results", exc_info=True)
         

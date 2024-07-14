@@ -15,36 +15,19 @@ def get_trace_eigenvals(matrix):
     trace=squared_matrix.trace().evalf()
     return trace,eigenvals
 
-def calculate_avrg(Averiging_rate,sol_00,sol_11,sol_22,t_last_x_values):
-    zero_vals = sol_00[-Averiging_rate:]
-    one_vals=sol_11[-Averiging_rate:]
-    two_vals=sol_22[-Averiging_rate:]
-    # Compute the time interval T(x)
-    T_x = t_last_x_values[-1] - t_last_x_values[0]
-    integral_00 = np.trapz(zero_vals,t_last_x_values)/ T_x 
-    #print(integral_00)
-    integral_11 = np.trapz(one_vals,t_last_x_values)/ T_x 
-    integral_22 = np.trapz(two_vals,t_last_x_values)/ T_x 
-    
-    averaged_vals=[integral_00 ,integral_11 ,integral_22]
-    return averaged_vals
+def calculate_avrg_vars(Averiging_rate,arr_of_sols,t_last_x_values):
+    '''For a given Averiging rate takes an array of solutions and the last x values of the time to calculate the variances and averages of given values in the array of solution'''
+    averaged_vals=[]
+    variances=[]
+    for sol in arr_of_sols:
+        vals = sol[-Averiging_rate:]
+        T_x = t_last_x_values[-1] - t_last_x_values[0]
+        integral_sol = np.trapz(vals,t_last_x_values)/ T_x 
+        averaged_vals.append(integral_sol)
+        integrand_variances = (vals-integral_sol)**2
+        T_x = t_last_x_values[-1] - t_last_x_values[0]
+        variance= np.trapz(integrand_variances,t_last_x_values)/T_x
+        variances.append(variance)
+        
+    return averaged_vals,variances
 
-def calculate_variance(Averiging_rate,sol_00,sol_11,sol_22,averaged_vals,t_last_x_values):
-    integral_00 ,integral_11 ,integral_22=averaged_vals
-    zero_vals = sol_00[-Averiging_rate:]
-    one_vals=sol_11[-Averiging_rate:]
-    two_vals=sol_22[-Averiging_rate:]
-    # zero_vals = sol_00[-Averiging_rate:]
-    # one_vals=sol_11[-Averiging_rate:]
-    # two_vals=sol_22[-Averiging_rate:]
-    
-    zero_integrand=(zero_vals-integral_00)**2
-    one_integrand=(one_vals-integral_11)**2
-    two_integrand=(two_vals-integral_22)**2
-    
-    T_x = t_last_x_values[-1] - t_last_x_values[0]
-    var_00 = np.trapz(zero_integrand,t_last_x_values)/T_x
-    var_11 = np.trapz(one_integrand,t_last_x_values)/T_x
-    var_22 = np.trapz(two_integrand,t_last_x_values)/T_x
-    variances=[var_00,var_11,var_22]
-    return variances

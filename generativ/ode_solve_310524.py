@@ -6,7 +6,7 @@ import pandas as pd
 import sympy as sp
 import os
 import tracing as tr
-Omega_start = 6
+Omega_start = 4
 Omega_end = 12
 Omega_step = 1000
 

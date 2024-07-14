@@ -7,14 +7,12 @@ from matplotlib.colors import LogNorm
 import os
 
 # Parameter zum Steuern der Plotausgabe
-show_plots = False
+show_plots = True
 
 # Dateipfad zu den Daten
-#data_file_path = r"D:\Daten\Uni\Bachelor_Arbeit_old\daten\results_full_random_with_V_2_stationary.pkl"
+data_file_path = r"D:\Daten\Uni\Bachelor_Arbeit_old\generativ\stationary_130724.pkl"
 
-data_file_path =r"D:\Daten\Uni\Bachelor_Arbeit_old\generativ\eta.pkl"
-
-
+#<0|0>,<1|1>,<2|2>,<0|1>,<1|0>,<0|2>,<2|0>,<1|2>,<2|1>,a,a_dagger
 
 df_full = pd.read_pickle(data_file_path)
 
@@ -26,7 +24,7 @@ output_directory = os.path.join(os.path.dirname(data_file_path), data_filename)
 if not show_plots and not os.path.exists(output_directory):
     os.makedirs(output_directory)
 
-# Wähle die zu plottenden Datenpunkte aus und filtere V > 0
+# Wähle die zu plottenden Datenpunkte aus und filtere V < 0
 df_filtered = df_full[df_full['V'] < 0]
 V = df_filtered['V'].to_numpy()
 psi_00_all = df_filtered['<0|0>'].to_numpy()
@@ -35,8 +33,8 @@ psi_22_all = df_filtered['<2|2>'].to_numpy()
 eigenvals = df_filtered['eigenvals']
 purity = df_filtered['purity'].to_numpy()
 values = df_filtered['additional params'].to_numpy()
-start_cond = df_filtered['startcond']
-variances = df_filtered['Variances']
+start_cond = df_filtered['startcond'].to_numpy()
+variances = np.array(df_filtered['Variances'].tolist())
 
 # Extract Omega and V values from additional params
 Omega = np.array([params[3] for params in values])
@@ -54,7 +52,7 @@ heatmap_data_00 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_11 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_22 = np.full((len(V_unique), len(Omega_unique)), np.nan)
 heatmap_data_purity = np.full((len(V_unique), len(Omega_unique)), np.nan)
-variance_matrices = [np.full((len(V_unique), len(Omega_unique)), np.nan) for _ in range(len(variances.iloc[0]))]
+variance_matrices = [np.full((len(V_unique), len(Omega_unique)), np.nan) for _ in range(11)]
 
 def get_real_value(value):
     if isinstance(value, sp.Expr):
@@ -70,8 +68,8 @@ for i, v in enumerate(V_unique):
             heatmap_data_11[i, j] = get_real_value(psi_11_all[indices][0])
             heatmap_data_22[i, j] = get_real_value(psi_22_all[indices][0])
             heatmap_data_purity[i, j] = get_real_value(purity[indices][0])
-            for k in range(len(variances.iloc[indices[0]])):
-                variance_matrices[k][i, j] = get_real_value(variances.iloc[indices[0]][k])
+            for k in range(11):
+                variance_matrices[k][i, j] = get_real_value(variances[indices[0]][k])
 
 def plot_heatmap_adjusted(data, title, xlabel='Omega', ylabel='V', cmap='viridis', omega_lines=None, log_scale=False, save_path=None):
     plt.figure(figsize=(10, 8))
@@ -121,7 +119,7 @@ for i, variance_matrix in enumerate(variance_matrices):
                           save_path=os.path.join(output_directory, f'Variance_{i + 1}.png'))
 
 # 2D plot of variance over V
-variance_over_V = [get_real_value(variance[0]) + get_real_value(variance[1]) + get_real_value(variance[2]) for variance in variances]
+variance_over_V = [sum(get_real_value(var) for var in variance) for variance in variances]
 
 plt.figure(figsize=(10, 8))
 plt.plot(V, variance_over_V, 'o-', linewidth=0)
@@ -136,7 +134,7 @@ else:
     plt.close()
 
 # 2D plot of variance over Omega
-variance_over_Omega = [get_real_value(variance[0]) + get_real_value(variance[1]) + get_real_value(variance[2]) for variance in variances]
+variance_over_Omega = [sum(get_real_value(var) for var in variance) for variance in variances]
 
 plt.figure(figsize=(10, 8))
 plt.plot(Omega, variance_over_Omega, 'o', linewidth=0)
