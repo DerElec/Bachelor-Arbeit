@@ -1,9 +1,77 @@
+################################################################################
 # Import required packages
 using OrdinaryDiffEq       # For ODE solvers
-using Plots                # For plotting heatmaps
-using HDF5                 # For saving data in h5 files
+using Plots                # For plotting heatmaps and GIF creation
+using HDF5                 # For saving data in HDF5 files
 using Statistics           # For mean and variance computations
+using Dates                # For timestamps
+using FileIO               # (for file management if needed)
 
+################################################################################
+# Create a unique output folder in the same directory as the code
+# This function creates a folder with the given base name. If it exists,
+# it appends an incrementing number to the folder name.
+function create_unique_folder(base_dir::String, base_name::String)
+    folder = joinpath(base_dir, base_name)
+    counter = 1
+    while isdir(folder)
+        folder = joinpath(base_dir, base_name * "_" * string(counter))
+        counter += 1
+    end
+    mkpath(folder)
+    return folder
+end
+
+# Create the output folder (e.g. "results", "results_1", ...)
+output_dir = create_unique_folder(@__DIR__, "results")
+println("Output folder created: ", output_dir)
+
+################################################################################
+# Define the Gamma range parameters:
+# Here you can choose the start, stop and step size for Gamma.
+gamma_min = 0.0
+gamma_max = 3.0
+gamma_step = 0.5
+gamma_range = collect(gamma_min:gamma_step:gamma_max)
+
+################################################################################
+# Define fixed parameters (except Omega, V and Gamma, which will be overwritten)
+base_params = (
+    kappa  = 1.0,
+    gamma  = 1.0,     # used also as g₀ in the analytical boundary expression
+    Gamma  = 1.0,     # will be overwritten by gamma_range value
+    Omega  = 8.0,     # initial value (will be overwritten in the parameter scan)
+    delta1 = 1.0,
+    delta2 = 1.0,
+    eta    = 1.0,
+    V      = -8.0     # initial value (will be overwritten in the parameter scan)
+)
+
+################################################################################
+# Define time span for the simulation
+t0 = 0.0
+t_end = 2000.0
+tspan = (t0, t_end)
+
+################################################################################
+# Define simulation initial conditions (state vector with 11 components)
+# Simulation 1: All zeros except ψ₀₀ = 1 (Index 3)
+simulations = [
+    ("Sim1_psi00", [0.0+0im, 0.0+0im, 1.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im])
+    # Add more simulations if desired.
+]
+
+################################################################################
+# Define parameter ranges for Omega and V.
+omega_values = collect(range(0, stop=8, length=50))   # x-axis values for Omega
+v_values     = collect(range(-16.0, stop=-0, length=50))  # y-axis values for V
+
+# Function to compute the analytical V line as a function of Omega:
+function compute_v_line(omega_vals, params)
+    return -params.delta2/2 * (((omega_vals .* params.kappa) ./ (4 * params.eta * params.gamma)).^2 .+ 1)
+end
+
+################################################################################
 # Define the ODE function (with English comments)
 function rhs_dgl(y, params)
     # Unpack state vector
@@ -21,15 +89,15 @@ function rhs_dgl(y, params)
 
     # Unpack parameters
     κ     = params.kappa     # e.g. 1.0
-    γ     = params.gamma     # e.g. 1.0
-    Γ     = params.Gamma     # e.g. 2.0
+    γ     = params.gamma     # e.g. 1.0 (used as g₀ for the analytical boundary)
+    Γ     = params.Gamma     # overwritten by gamma_range value
     Ω     = params.Omega     # overwritten in the parameter scan
     δ₁    = params.delta1    # e.g. 1.0
     δ₂    = params.delta2    # e.g. 1.0
     η     = params.eta       # e.g. 1.0
     V     = params.V         # overwritten in the parameter scan
 
-    # Define the ODEs
+    # Define the ODE system
     da_dt          = -κ/2 * a - 1im*(γ*ket01) + η
     da_dagger_dt   = conj(da_dt)
 
@@ -61,229 +129,165 @@ function rhs_dgl(y, params)
     ]
 end
 
-# Define fixed parameters (except Omega and V, which will be overwritten)
-base_params = (
-    kappa  = 1.0,
-    gamma  = 1.0,
-    Gamma  = 2.0,
-    Omega  = 8.0,   # initial value (will be overwritten)
-    delta1 = 1.0,
-    delta2 = 1.0,
-    eta    = 1.0,
-    V      = -8.0   # initial value (will be overwritten)
-)
+################################################################################
+# Prepare arrays to store plot objects for GIF creation (one for each plot type)
+mean_a_plots    = Any[]
+mean_psi11_plots = Any[]
+var_sum_plots   = Any[]
 
-# Define time span for the simulation
-t0 = 0.0
-t_end = 2000.0
-tspan = (t0, t_end)
-
-# Define simulation initial conditions (state vector with 11 components)
-simulations = [
-    # Simulation 1: Alle Komponenten 0 außer ψ₀₀ = 1 (Index 3)
-    ("Sim1_psi00", [0.0+0im, 0.0+0im, 1.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im]),
-    # Simulation 2: Alle Komponenten 0 außer ψ₁₁ = 1 (Index 6)
-    ("Sim2_psi22", [0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 1.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im])
-]
-
-# Parameterbereich für Omega und V: beide von 0 bis 8
-omega_values = collect(range(0, stop=8, length=15))  # x-Achse
-v_values     = collect(range(0, stop=-8.0, length=15))  # y-Achse
-
-# Loop über die verschiedenen Initialbedingungen
-for (sim_label, y0) in simulations
-    println("Paul, starte Simulation: ", sim_label)
+################################################################################
+# Loop over the Gamma range
+for gamma_val in gamma_range
+    # Update the base parameters with the current Gamma value
+    current_params_base = merge(base_params, (Gamma = gamma_val,))
     
-    n_omega = length(omega_values)
-    n_v = length(v_values)
+    # Compute the analytical V line for the current parameters
+    current_v_line = compute_v_line(omega_values, current_params_base)
     
-    # Pre-allocation der Arrays für Mittelwert und Varianz der 5 Observablen:
-    # 1. a (Kavitätenfeld, |a| wird geplottet)
-    mean_a_array = zeros(n_v, n_omega)
-    var_a_array  = zeros(n_v, n_omega)
-    
-    # 2. Kavitätenpopulation |a|²
-    mean_pop_array = zeros(n_v, n_omega)
-    var_pop_array  = zeros(n_v, n_omega)
-    
-    # 3. ψ₀₀ (Index 3)
-    mean_psi00_array = zeros(n_v, n_omega)
-    var_psi00_array  = zeros(n_v, n_omega)
-    
-    # 4. ψ₁₁ (Index 6)
-    mean_psi11_array = zeros(n_v, n_omega)
-    var_psi11_array  = zeros(n_v, n_omega)
-    
-    # 5. ψ₂₂ (Index 7)
-    mean_psi22_array = zeros(n_v, n_omega)
-    var_psi22_array  = zeros(n_v, n_omega)
-    
-    for (i, v) in enumerate(v_values)
-        for (j, omega) in enumerate(omega_values)
-            println("Paul, bearbeite Omega = ", omega, ", V = ", v)
-            current_params = (; base_params..., Omega = omega, V = v)
-            prob = ODEProblem((y, p, t) -> rhs_dgl(y, p), y0, tspan, current_params)
-            sol = solve(prob, Tsit5(); abstol=1e-8, reltol=1e-8)
-            
-            # Verwende die letzten 25 % der Zeitreihe für die Auswertung:
-            n = length(sol.t)
-            start_index = floor(Int, 0.75 * n) + 1
-            
-            # a (Kavitätenfeld) – komplex, daher plotten wir den Betrag
-            last_quarter_a = sol[1, start_index:end]
-            # Kavitätenpopulation: |a|²
-            last_quarter_pop = abs.(sol[1, start_index:end]).^2
-            
-            # ψ₀₀ (Index 3), ψ₁₁ (Index 6) und ψ₂₂ (Index 7) als reelle Größen
-            last_quarter_psi00 = real.(sol[3, start_index:end])
-            last_quarter_psi11 = real.(sol[6, start_index:end])
-            last_quarter_psi22 = real.(sol[7, start_index:end])
-            
-            # Berechne Mittelwerte und Varianzen
-            mean_a    = abs(mean(last_quarter_a))
-            var_a     = var(abs.(last_quarter_a))
-            
-            mean_pop  = mean(last_quarter_pop)
-            var_pop   = var(last_quarter_pop)
-            
-            mean_psi00 = mean(last_quarter_psi00)
-            var_psi00  = var(last_quarter_psi00)
-            
-            mean_psi11 = mean(last_quarter_psi11)
-            var_psi11  = var(last_quarter_psi11)
-            
-            mean_psi22 = mean(last_quarter_psi22)
-            var_psi22  = var(last_quarter_psi22)
-            
-            # Speichere die Ergebnisse in den Arrays
-            mean_a_array[i, j]    = mean_a
-            var_a_array[i, j]     = var_a
-            
-            mean_pop_array[i, j]  = mean_pop
-            var_pop_array[i, j]   = var_pop
-            
-            mean_psi00_array[i, j] = mean_psi00
-            var_psi00_array[i, j]  = var_psi00
-            
-            mean_psi11_array[i, j] = mean_psi11
-            var_psi11_array[i, j]  = var_psi11
-            
-            mean_psi22_array[i, j] = mean_psi22
-            var_psi22_array[i, j]  = var_psi22
+    # Loop over the different simulations (here only one is defined)
+    for (sim_label, y0) in simulations
+        # Append the Gamma value to the simulation label for uniqueness
+        new_sim_label = sim_label * "_Gamma_" * string(gamma_val)
+        println("Starting simulation: ", new_sim_label)
+        
+        n_omega = length(omega_values)
+        n_v = length(v_values)
+        
+        # Pre-allocate arrays for the mean and variance of observables:
+        mean_a_array     = zeros(n_v, n_omega)
+        var_a_array      = zeros(n_v, n_omega)
+        mean_pop_array   = zeros(n_v, n_omega)
+        var_pop_array    = zeros(n_v, n_omega)
+        mean_psi00_array = zeros(n_v, n_omega)
+        var_psi00_array  = zeros(n_v, n_omega)
+        mean_psi11_array = zeros(n_v, n_omega)
+        var_psi11_array  = zeros(n_v, n_omega)
+        mean_psi22_array = zeros(n_v, n_omega)
+        var_psi22_array  = zeros(n_v, n_omega)
+        
+        for (i, v) in enumerate(v_values)
+            for (j, omega) in enumerate(omega_values)
+                println("Processing Omega = ", omega, ", V = ", v)
+                # Update parameters for the current run (Omega and V are overwritten)
+                current_params = merge(current_params_base, (Omega = omega, V = v))
+                prob = ODEProblem((y, p, t) -> rhs_dgl(y, p), y0, tspan, current_params)
+                sol = solve(prob, Tsit5(); abstol=1e-8, reltol=1e-8)
+                
+                # Use the last 25% of the time series for evaluation:
+                n_t = length(sol.t)
+                start_index = floor(Int, 0.75 * n_t) + 1
+                
+                # Extract observables from the last quarter of the time series:
+                last_quarter_a    = sol[1, start_index:end]
+                last_quarter_pop  = abs.(sol[1, start_index:end]).^2
+                last_quarter_psi00 = real.(sol[3, start_index:end])
+                last_quarter_psi11 = real.(sol[6, start_index:end])
+                last_quarter_psi22 = real.(sol[7, start_index:end])
+                
+                # Compute means and variances
+                mean_a    = abs(mean(last_quarter_a))
+                var_a     = var(abs.(last_quarter_a))
+                mean_pop  = mean(last_quarter_pop)
+                var_pop   = var(last_quarter_pop)
+                mean_psi00 = mean(last_quarter_psi00)
+                var_psi00  = var(last_quarter_psi00)
+                mean_psi11 = mean(last_quarter_psi11)
+                var_psi11  = var(last_quarter_psi11)
+                mean_psi22 = mean(last_quarter_psi22)
+                var_psi22  = var(last_quarter_psi22)
+                
+                # Store the computed values in the arrays
+                mean_a_array[i, j]     = mean_a
+                var_a_array[i, j]      = var_a
+                mean_pop_array[i, j]   = mean_pop
+                var_pop_array[i, j]    = var_pop
+                mean_psi00_array[i, j] = mean_psi00
+                var_psi00_array[i, j]  = var_psi00
+                mean_psi11_array[i, j] = mean_psi11
+                var_psi11_array[i, j]  = var_psi11
+                mean_psi22_array[i, j] = mean_psi22
+                var_psi22_array[i, j]  = var_psi22
+            end
         end
-    end
-    
-    # Definiere das Ausgabeverzeichnis (das Verzeichnis, in dem das Skript liegt)
-    output_dir = @__DIR__
-    
-    # Erstelle und speichere die Heatmaps:
-    # 1. Für a (Kavitätenfeld, |a|)
-    p_mean_a = heatmap(omega_values, v_values, mean_a_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Mittelwert von |a| (Kavitätenfeld)",
-        colorbar_title = "Mittelwert")
-    display(p_mean_a)
-    savefig(p_mean_a, joinpath(output_dir, sim_label * "_mean_a.png"))
-    
-    p_var_a = heatmap(omega_values, v_values, var_a_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Varianz von |a| (Kavitätenfeld)",
-        colorbar_title = "Varianz")
-    display(p_var_a)
-    savefig(p_var_a, joinpath(output_dir, sim_label * "_var_a.png"))
-    
-    # 2. Für die Kavitätenpopulation |a|²
-    p_mean_pop = heatmap(omega_values, v_values, mean_pop_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Mittelwert der Kavitätenpopulation |a|²",
-        colorbar_title = "Mittelwert")
-    display(p_mean_pop)
-    savefig(p_mean_pop, joinpath(output_dir, sim_label * "_mean_pop.png"))
-    
-    p_var_pop = heatmap(omega_values, v_values, var_pop_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Varianz der Kavitätenpopulation |a|²",
-        colorbar_title = "Varianz")
-    display(p_var_pop)
-    savefig(p_var_pop, joinpath(output_dir, sim_label * "_var_pop.png"))
-    
-    # 3. Für ψ₀₀
-    p_mean_psi00 = heatmap(omega_values, v_values, mean_psi00_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Mittelwert von ψ₀₀",
-        colorbar_title = "Mittelwert")
-    display(p_mean_psi00)
-    savefig(p_mean_psi00, joinpath(output_dir, sim_label * "_mean_psi00.png"))
-    
-    p_var_psi00 = heatmap(omega_values, v_values, var_psi00_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Varianz von ψ₀₀",
-        colorbar_title = "Varianz")
-    display(p_var_psi00)
-    savefig(p_var_psi00, joinpath(output_dir, sim_label * "_var_psi00.png"))
-    
-    # 4. Für ψ₁₁
-    p_mean_psi11 = heatmap(omega_values, v_values, mean_psi11_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Mittelwert von ψ₁₁",
-        colorbar_title = "Mittelwert")
-    display(p_mean_psi11)
-    savefig(p_mean_psi11, joinpath(output_dir, sim_label * "_mean_psi11.png"))
-    
-    p_var_psi11 = heatmap(omega_values, v_values, var_psi11_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Varianz von ψ₁₁",
-        colorbar_title = "Varianz")
-    display(p_var_psi11)
-    savefig(p_var_psi11, joinpath(output_dir, sim_label * "_var_psi11.png"))
-    
-    # 5. Für ψ₂₂
-    p_mean_psi22 = heatmap(omega_values, v_values, mean_psi22_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Mittelwert von ψ₂₂",
-        colorbar_title = "Mittelwert")
-    display(p_mean_psi22)
-    savefig(p_mean_psi22, joinpath(output_dir, sim_label * "_mean_psi22.png"))
-    
-    p_var_psi22 = heatmap(omega_values, v_values, var_psi22_array,
-        xlabel = "Omega",
-        ylabel = "V",
-        title = "Paul: Varianz von ψ₂₂",
-        colorbar_title = "Varianz")
-    display(p_var_psi22)
-    savefig(p_var_psi22, joinpath(output_dir, sim_label * "_var_psi22.png"))
-    
-    # Speichere alle Arrays und Eingangsparameter in einer HDF5-Datei im aktuellen Verzeichnis
-    h5_filename = joinpath(output_dir, sim_label * "_data.h5")
-    h5open(h5_filename, "w") do file
-        # Speichere die Basisparameter als Gruppe
-        grp = create_group(file, "base_params")
-        for (k, v) in pairs(base_params)
-            grp[string(k)] = v
+        
+        # Define the output HDF5 filename for this Gamma value
+        h5_filename = joinpath(output_dir, new_sim_label * "_data.h5")
+        
+        # Save the data into the HDF5 file
+        h5open(h5_filename, "w") do file
+            write(file, "omega_values", omega_values)
+            write(file, "v_values", v_values)
+            write(file, "mean_a_array", mean_a_array)
+            write(file, "var_a_array", var_a_array)
+            write(file, "mean_pop_array", mean_pop_array)
+            write(file, "var_pop_array", var_pop_array)
+            write(file, "mean_psi00_array", mean_psi00_array)
+            write(file, "var_psi00_array", var_psi00_array)
+            write(file, "mean_psi11_array", mean_psi11_array)
+            write(file, "var_psi11_array", var_psi11_array)
+            write(file, "mean_psi22_array", mean_psi22_array)
+            write(file, "var_psi22_array", var_psi22_array)
+            write(file, "tspan", [t0, t_end])
         end
-        file["tspan"] = [t0, t_end]
-        file["omega_values"] = omega_values
-        file["v_values"] = v_values
-        file["mean_a_array"] = mean_a_array
-        file["var_a_array"]  = var_a_array
-        file["mean_pop_array"] = mean_pop_array
-        file["var_pop_array"]  = var_pop_array
-        file["mean_psi00_array"] = mean_psi00_array
-        file["var_psi00_array"]  = var_psi00_array
-        file["mean_psi11_array"] = mean_psi11_array
-        file["var_psi11_array"]  = var_psi11_array
-        file["mean_psi22_array"] = mean_psi22_array
-        file["var_psi22_array"]  = var_psi22_array
+        
+        ################################################################################
+        # Load data from the HDF5 file and generate separate plots.
+        h5open(h5_filename, "r") do file
+            merged_omega = read(file, "omega_values")
+            merged_v = read(file, "v_values")
+            # Recompute the analytical V line for the merged Omega grid:
+            merged_v_line = compute_v_line(merged_omega, current_params_base)
+            x_limits = (minimum(merged_omega), maximum(merged_omega))
+            y_limits = (minimum(merged_v), maximum(merged_v))
+            
+            # Plot 1: Combined Mean of |a| (Cavity Field)
+            merged_mean_a = read(file, "mean_a_array")
+            p1 = heatmap(merged_omega, merged_v, merged_mean_a,
+                xlabel = "Omega",
+                ylabel = "V",
+                title = "Combined Mean of |a| (Cavity Field) (Gamma = $(gamma_val))",
+                colorbar_title = "Mean",
+                xlims = x_limits,
+                ylims = y_limits)
+            plot!(p1, merged_omega, merged_v_line, linecolor=:red, lw=2, label="Analytical V line")
+            savefig(p1, joinpath(output_dir, new_sim_label * "_mean_a.png"))
+            push!(mean_a_plots, p1)
+            
+            # Plot 2: Combined Mean of ψ₁₁
+            merged_mean_psi11 = read(file, "mean_psi11_array")
+            p2 = heatmap(merged_omega, merged_v, merged_mean_psi11,
+                xlabel = "Omega",
+                ylabel = "V",
+                title = "Combined Mean of ψ₁₁ (Gamma = $(gamma_val))",
+                colorbar_title = "Mean",
+                xlims = x_limits,
+                ylims = y_limits)
+            plot!(p2, merged_omega, merged_v_line, linecolor=:red, lw=2, label="Analytical V line")
+            savefig(p2, joinpath(output_dir, new_sim_label * "_mean_psi11.png"))
+            push!(mean_psi11_plots, p2)
+            
+            # Plot 3: Sum of Variances (ψ₀₀, ψ₁₁, ψ₂₂)
+            merged_var_psi00 = read(file, "var_psi00_array")
+            merged_var_psi11 = read(file, "var_psi11_array")
+            merged_var_psi22 = read(file, "var_psi22_array")
+            merged_var_sum = merged_var_psi00 .+ merged_var_psi11 .+ merged_var_psi22
+            p3 = heatmap(merged_omega, merged_v, merged_var_sum,
+                xlabel = "Omega",
+                ylabel = "V",
+                title = "Sum of Variances (ψ₀₀, ψ₁₁, ψ₂₂) (Gamma = $(gamma_val))",
+                colorbar_title = "Variance Sum",
+                xlims = x_limits,
+                ylims = y_limits)
+            plot!(p3, merged_omega, merged_v_line, linecolor=:red, lw=2, label="Analytical V line")
+            savefig(p3, joinpath(output_dir, new_sim_label * "_variance_sum.png"))
+            push!(var_sum_plots, p3)
+        end
+        
+        println("Simulation ", new_sim_label, " completed. Data and plots saved.")
     end
-    
-    println("Paul, Simulation ", sim_label, " abgeschlossen. Ergebnisse in ", h5_filename, " gespeichert.")
 end
+
+################################################################################
+# Create GIFs from the accumulated plots (one GIF per plot type)
+
+println("All simulations completed.")
