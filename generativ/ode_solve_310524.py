@@ -34,7 +34,7 @@ results = []
 results_full = []
 
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    for V in np.arange(-4, -0.5, 111):
+    for V in np.arange(-4, -0.5, 11):
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
         Gamma = 2  # Decay rate from first excited state to ground
@@ -172,7 +172,7 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         
         Averiging_rate = 500
         t_last_x_values = sol.t[-Averiging_rate:]
-        averaged_vals = tr.calculate_avrg(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], t_last_x_values)
+        averaged_vals = tr.calculate_avrg_vars(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], t_last_x_values)
         variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals, t_last_x_values)
         
         results_full.append([V] + averaged_vals + [eigenvals] + [trace] + [vals] + [startcond] + [variances])

@@ -14,7 +14,7 @@ logging.basicConfig(filename='error.log', level=logging.ERROR)
 
 Omega_start = 0
 Omega_end = 12
-Omega_step = 0.1
+Omega_step = 1
 
 def is_positive_semidefinite(matrix):
     """Check if a matrix is positive semidefinite."""
@@ -28,7 +28,7 @@ def is_density_matrix_physical(rho):
 
 def compute(Omega):
     result_full = []
-    for V in np.arange(-8, -0.01, 0.01): 
+    for V in np.arange(-8, -0.01, 1): 
         delta_2 = 1
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
