@@ -182,5 +182,7 @@ def run_all():
     # sp.pprint(sE)
     # print()
     # sp.pprint(G)
-    return G,sDs,Z,P,Q,Z_prime
-print("done computing Z, Z', sDs, Q, G ...")
+    W=sE+Z
+    print("done computing Z, Z', sDs, Q, G ...")
+    return G,sDs,Z,P,Q,Z_prime,W
+
