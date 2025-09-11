@@ -7,8 +7,8 @@ def create_all():
     kappa, gamma, Gamma, Omega, delta1, delta2, eta, V = sp.symbols(
         "kappa gamma Gamma Omega delta1 delta2 eta V", real=True
     )
-    sqrt2 = sp.sqrt(2)
-    sqrt3 = sp.sqrt(3)
+    sqrt2 = np.sqrt(2)
+    sqrt3 = np.sqrt(3)
 
     # 2) Time and functions
     t = sp.symbols("t", real=True)
@@ -122,56 +122,56 @@ def create_all():
     Gamma, Delta1, Delta2, Omega, V = sp.symbols('Gamma Delta1 Delta2 Omega V')
 
     # --- Define the RHS of each equation f1...f10 ---
-    f1 = -kappa/2 * q + gamma*g0/sp.sqrt(2)*lambda2 + sp.sqrt(2)*Re_eta
-    f2 = -kappa/2 * p - gamma*g0/sp.sqrt(2)*lambda1 + sp.sqrt(2)*Im_eta
+    f1 = -kappa/2 * q + gamma*g0/np.sqrt(2)*lambda2 + np.sqrt(2)*Re_eta
+    f2 = -kappa/2 * p - gamma*g0/np.sqrt(2)*lambda1 + np.sqrt(2)*Im_eta
 
     f3 = -Gamma/2 * lambda1 \
         + Delta1 * lambda2 \
         + Omega/2 * lambda5 \
-        + sp.sqrt(2)*gamma*g0*lambda3*p
+        + np.sqrt(2)*gamma*g0*lambda3*p
 
     f4 = -Gamma/2 * lambda2 \
         - Delta1 * lambda1 \
         - Omega/2 * lambda4 \
-        - sp.sqrt(2)*gamma*g0*lambda3*q
+        - np.sqrt(2)*gamma*g0*lambda3*q
 
     f5 = -Gamma * lambda3 \
-        + (sp.sqrt(3)*Gamma/3) * lambda8 \
+        + (np.sqrt(3)*Gamma/3) * lambda8 \
         + 2*Gamma/3 \
         - Omega/2 * lambda7 \
-        - sp.sqrt(2)*gamma*g0*(lambda1*p - lambda2*q)
+        - np.sqrt(2)*gamma*g0*(lambda1*p - lambda2*q)
 
     f6 = sp.I * (
             Delta2*lambda4
             + Omega/2*lambda1
-            - 2*sp.sqrt(3)/3*V*lambda4*lambda8
+            - 2*np.sqrt(3)/3*V*lambda4*lambda8
             - 2*V/3*(lambda4**2 - lambda5**2 + 2*lambda7**2)
-            + sp.sqrt(2)/2*gamma*g0*(lambda7*p - lambda6*q)
+            + np.sqrt(2)/2*gamma*g0*(lambda7*p - lambda6*q)
         )
 
     f7 = sp.I * (
             Delta2*lambda5
             - Omega/2*lambda2
-            - 2*sp.sqrt(3)/3*V*lambda5*lambda8
+            - 2*np.sqrt(3)/3*V*lambda5*lambda8
             - 2*V/3*(lambda5**2 - lambda4**2 + 2*lambda6**2)
-            + sp.sqrt(2)/2*gamma*g0*(lambda6*p + lambda7*q)
+            + np.sqrt(2)/2*gamma*g0*(lambda6*p + lambda7*q)
         )
 
     f8 = -Gamma/2 * lambda6 \
         + (Delta2 - Delta1)*lambda7 \
         + Omega/2*lambda4 \
-        - 2*sp.sqrt(3)/3*V*lambda6*lambda8 \
+        - 2*np.sqrt(3)/3*V*lambda6*lambda8 \
         - 2*V/3*(lambda4*lambda7 - lambda5*lambda6) \
-        + sp.sqrt(2)/2*gamma*g0*(lambda4*p - lambda5*q)
+        + np.sqrt(2)/2*gamma*g0*(lambda4*p - lambda5*q)
 
     f9 = -Gamma/2 * lambda7 \
         - (Delta2 - Delta1)*lambda6 \
         - Omega/2*lambda5 \
-        - 2*sp.sqrt(3)/3*V*lambda7*lambda8 \
+        - 2*np.sqrt(3)/3*V*lambda7*lambda8 \
         - 2*V/3*(lambda4*lambda6 + lambda5*lambda7) \
-        + sp.sqrt(2)/2*gamma*g0*(lambda4*q + lambda5*p)
+        + np.sqrt(2)/2*gamma*g0*(lambda4*q + lambda5*p)
 
-    f10 = sp.sqrt(3)/2 * Omega * lambda7
+    f10 = np.sqrt(3)/2 * Omega * lambda7
 
     # --- Assemble state vector in order x = [λ1...λ8, q, p] ---
     x = sp.Matrix([
@@ -320,12 +320,12 @@ def create_all():
         lambda_syms[i]: initial_state[i] for i in range(8)
     }
     #[0,0,1,0,0,0,0,1/np.sqrt(3),0,0] 
-    #initial_state[lambda_syms[7]] = 1/sp.sqrt(3)
+    #initial_state[lambda_syms[7]] = 1/np.sqrt(3)
     #initial_state[lambda_syms[2]] = 1
 
 
     #initial_state=[0,0,0,0,0,0,0,-2/np.sqrt(3),0,0]  # state sigma_22=1
-    #initial_state[lambda_syms[7]] = -2/sp.sqrt(3)
+    #initial_state[lambda_syms[7]] = -2/np.sqrt(3)
     check_state[q_sym] = 0
     check_state[p_sym] = 0
 
@@ -334,7 +334,7 @@ def create_all():
     #sp.pprint(R)
     #sp.pprint(check_s0)
     #sp.pprint(s0)
-    #sp.pprint(check_s0_sub)
+    sp.pprint(check_s0_sub)
 
 
 

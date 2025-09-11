@@ -5,6 +5,7 @@ using Plots                # For plotting heatmaps
 using HDF5                 # For saving data in h5 files
 using Statistics           # For mean and variance computations
 using Base.Threads         # For multithreading
+using ProgressMeter        # For progress bars with ETA (thread-safe)
 
 ################################################################################
 # Define the ODE function (with English comments)
@@ -80,7 +81,7 @@ base_params = (
 ################################################################################
 # Define time span for the simulation
 t0 = 0.0
-t_end = 2000.0
+t_end = 4000.0
 tspan = (t0, t_end)
 
 ################################################################################
@@ -88,114 +89,111 @@ tspan = (t0, t_end)
 simulations = [
     # Simulation 1: Alle Komponenten 0 außer ψ₀₀ = 1 (Index 3)
     ("Sim1_psi00", [0.0+0im, 0.0+0im, 1.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im]),
-    # Simulation 2: Alle Komponenten 0 außer ψ₁₁ = 1 (Index 6)
-    ("Sim2_psi11", [0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 1.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im, 0.0+0im])
 ]
 
 ################################################################################
 # Define parameter ranges for Omega and V.
-# (Hinweis: Falls die analytische Linie negative V-Werte liefert, solltest Du 
-# den V-Bereich anpassen. Hier bleiben die Bereiche, wie zuvor, als Beispiel.)
-omega_values = collect(range(0.0, stop=8.0, length=20))  # x-Achse
-v_values     = collect(range(0.0, stop=8.0, length=20))  # y-Achse
+omega_values = collect(range(0.0, stop=8.0, length=400))  # x-axis
+v_values     = collect(range(-8, stop=8.0, length=400))   # y-axis
 
-# Anzahl der Werte
+# Sizes
 n_omega = length(omega_values)
 n_v     = length(v_values)
+n_points = n_v * n_omega  # total (V, Ω) pairs per simulation
 
-# Berechne die analytische Linie als Funktion von Omega (g_0 wird als gamma interpretiert)
+# Analytical line as a function of Omega (g0 is identified with gamma)
 line_V = -base_params.delta2/2 * (((omega_values .* base_params.kappa) ./ (4 * base_params.eta * base_params.gamma)).^2 .+ 1)
 
 ################################################################################
-# Loop über die verschiedenen Initialbedingungen
+# Loop over different initial conditions
 for (sim_label, y0) in simulations
-    println("starte Simulation: ", sim_label)
-    
-    # Pre-allocation der Arrays für Mittelwert und Varianz der 5 Observablen:
-    # 1. |a| (Kavitätenfeld)
+    println("Starte Simulation: ", sim_label, " (", n_points, " Parameterpunkte)")
+
+    # Pre-allocate arrays for 5 observables
     mean_a_array = zeros(n_v, n_omega)
     var_a_array  = zeros(n_v, n_omega)
-    
-    # 2. Kavitätenpopulation |a|²
+
     mean_pop_array = zeros(n_v, n_omega)
     var_pop_array  = zeros(n_v, n_omega)
-    
-    # 3. ψ₀₀ (Index 3)
+
     mean_psi00_array = zeros(n_v, n_omega)
     var_psi00_array  = zeros(n_v, n_omega)
-    
-    # 4. ψ₁₁ (Index 6)
+
     mean_psi11_array = zeros(n_v, n_omega)
     var_psi11_array  = zeros(n_v, n_omega)
-    
-    # 5. ψ₂₂ (Index 7)
+
     mean_psi22_array = zeros(n_v, n_omega)
     var_psi22_array  = zeros(n_v, n_omega)
-    
-    # Parallelisierter Loop über die Parameter (V und Omega)
+
+    # Create a single progress bar for this simulation
+    # Note: ProgressMeter is thread-safe; calling next!(prog) inside @threads is fine.
+    prog = Progress(n_points; desc="Scan (V, Ω) für $(sim_label)", dt=0.5, barglyphs=BarGlyphs("[=> ]"))
+
     @threads for i in 1:n_v
         for j in 1:n_omega
             v_val = v_values[i]
             omega = omega_values[j]
+
             # Update parameters with current Omega and V values
             current_params = (; base_params..., Omega = omega, V = v_val)
+
+            # Solve ODE
             prob = ODEProblem((y, p, t) -> rhs_dgl(y, p), y0, tspan, current_params)
             sol = solve(prob, Tsit5(); abstol=1e-8, reltol=1e-8)
-            
-            # Verwende die letzten 25 % der Zeitreihe für die Auswertung:
+
+            # Use last 25% of time series for statistics
             n_t = length(sol.t)
             start_index = floor(Int, 0.75 * n_t) + 1
-            
-            # 1. a (Kavitätenfeld): Es wird der Betrag von a ausgewertet.
-            last_quarter_a = sol[1, start_index:end]
-            # 2. Kavitätenpopulation: |a|²
-            last_quarter_pop = abs.(sol[1, start_index:end]).^2
-            
-            # 3. ψ₀₀ (Index 3), 4. ψ₁₁ (Index 6), 5. ψ₂₂ (Index 7) – als reelle Größen:
+
+            # Extract observables
+            last_quarter_a    = sol[1, start_index:end]
+            last_quarter_pop  = abs.(sol[1, start_index:end]).^2
             last_quarter_psi00 = real.(sol[3, start_index:end])
             last_quarter_psi11 = real.(sol[6, start_index:end])
             last_quarter_psi22 = real.(sol[7, start_index:end])
-            
-            # Berechne Mittelwerte und Varianzen
+
+            # Compute means and variances
             mean_a    = abs(mean(last_quarter_a))
             var_a     = var(abs.(last_quarter_a))
-            
+
             mean_pop  = mean(last_quarter_pop)
             var_pop   = var(last_quarter_pop)
-            
+
             mean_psi00 = mean(last_quarter_psi00)
             var_psi00  = var(last_quarter_psi00)
-            
+
             mean_psi11 = mean(last_quarter_psi11)
             var_psi11  = var(last_quarter_psi11)
-            
+
             mean_psi22 = mean(last_quarter_psi22)
             var_psi22  = var(last_quarter_psi22)
-            
-            # Speichere die Ergebnisse in den Arrays
-            mean_a_array[i, j]    = mean_a
-            var_a_array[i, j]     = var_a
-            
-            mean_pop_array[i, j]  = mean_pop
-            var_pop_array[i, j]   = var_pop
-            
+
+            # Store results
+            mean_a_array[i, j]     = mean_a
+            var_a_array[i, j]      = var_a
+            mean_pop_array[i, j]   = mean_pop
+            var_pop_array[i, j]    = var_pop
             mean_psi00_array[i, j] = mean_psi00
             var_psi00_array[i, j]  = var_psi00
-            
             mean_psi11_array[i, j] = mean_psi11
             var_psi11_array[i, j]  = var_psi11
-            
             mean_psi22_array[i, j] = mean_psi22
             var_psi22_array[i, j]  = var_psi22
+
+            # Advance progress bar (thread-safe)
+            next!(prog)
         end
-    end  # Ende der parallelisierten Schleife
-    
+    end  # end threaded loops
+
+    # Ensure progress bar finishes cleanly
+    finish!(prog)
+    println("Scan abgeschlossen für $(sim_label). Erzeuge Plots und speichere Daten …")
+
     ################################################################################
-    # Definiere das Ausgabeverzeichnis (das Verzeichnis, in dem das Skript liegt)
+    # Output directory (directory of this script)
     output_dir = @__DIR__
-    
-    # Erstelle und speichere die Heatmaps mit der analytischen Linie:
-    # 1. Für |a| (Kavitätenfeld)
+
+    # Plot heatmaps with analytical line
     p_mean_a = heatmap(omega_values, v_values, mean_a_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -204,7 +202,7 @@ for (sim_label, y0) in simulations
     plot!(p_mean_a, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_mean_a)
     savefig(p_mean_a, joinpath(output_dir, sim_label * "_mean_a.png"))
-    
+
     p_var_a = heatmap(omega_values, v_values, var_a_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -213,8 +211,7 @@ for (sim_label, y0) in simulations
     plot!(p_var_a, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_var_a)
     savefig(p_var_a, joinpath(output_dir, sim_label * "_var_a.png"))
-    
-    # 2. Für die Kavitätenpopulation |a|²
+
     p_mean_pop = heatmap(omega_values, v_values, mean_pop_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -223,7 +220,7 @@ for (sim_label, y0) in simulations
     plot!(p_mean_pop, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_mean_pop)
     savefig(p_mean_pop, joinpath(output_dir, sim_label * "_mean_pop.png"))
-    
+
     p_var_pop = heatmap(omega_values, v_values, var_pop_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -232,8 +229,7 @@ for (sim_label, y0) in simulations
     plot!(p_var_pop, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_var_pop)
     savefig(p_var_pop, joinpath(output_dir, sim_label * "_var_pop.png"))
-    
-    # 3. Für ψ₀₀
+
     p_mean_psi00 = heatmap(omega_values, v_values, mean_psi00_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -242,7 +238,7 @@ for (sim_label, y0) in simulations
     plot!(p_mean_psi00, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_mean_psi00)
     savefig(p_mean_psi00, joinpath(output_dir, sim_label * "_mean_psi00.png"))
-    
+
     p_var_psi00 = heatmap(omega_values, v_values, var_psi00_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -251,8 +247,7 @@ for (sim_label, y0) in simulations
     plot!(p_var_psi00, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_var_psi00)
     savefig(p_var_psi00, joinpath(output_dir, sim_label * "_var_psi00.png"))
-    
-    # 4. Für ψ₁₁
+
     p_mean_psi11 = heatmap(omega_values, v_values, mean_psi11_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -261,7 +256,7 @@ for (sim_label, y0) in simulations
     plot!(p_mean_psi11, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_mean_psi11)
     savefig(p_mean_psi11, joinpath(output_dir, sim_label * "_mean_psi11.png"))
-    
+
     p_var_psi11 = heatmap(omega_values, v_values, var_psi11_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -270,8 +265,7 @@ for (sim_label, y0) in simulations
     plot!(p_var_psi11, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_var_psi11)
     savefig(p_var_psi11, joinpath(output_dir, sim_label * "_var_psi11.png"))
-    
-    # 5. Für ψ₂₂
+
     p_mean_psi22 = heatmap(omega_values, v_values, mean_psi22_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -280,7 +274,7 @@ for (sim_label, y0) in simulations
     plot!(p_mean_psi22, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_mean_psi22)
     savefig(p_mean_psi22, joinpath(output_dir, sim_label * "_mean_psi22.png"))
-    
+
     p_var_psi22 = heatmap(omega_values, v_values, var_psi22_array,
         xlabel = "Omega",
         ylabel = "V",
@@ -289,12 +283,11 @@ for (sim_label, y0) in simulations
     plot!(p_var_psi22, omega_values, line_V, linecolor=:red, lw=2, label="Analytical Boundary")
     display(p_var_psi22)
     savefig(p_var_psi22, joinpath(output_dir, sim_label * "_var_psi22.png"))
-    
+
     ################################################################################
-    # Speichere alle Arrays und Eingangsparameter in einer HDF5-Datei im aktuellen Verzeichnis
-    h5_filename = joinpath(output_dir, sim_label * "_data.h5")
+    # Save arrays and inputs to HDF5 in current directory
+    h5_filename = joinpath(output_dir, sim_label * "_data_delta_one.h5")
     h5open(h5_filename, "w") do file
-        # Speichere die Basisparameter als Gruppe
         grp = create_group(file, "base_params")
         for (k, v) in pairs(base_params)
             grp[string(k)] = v
@@ -313,6 +306,6 @@ for (sim_label, y0) in simulations
         file["mean_psi22_array"] = mean_psi22_array
         file["var_psi22_array"]  = var_psi22_array
     end
-    
+
     println("Simulation ", sim_label, " abgeschlossen. Ergebnisse in ", h5_filename, " gespeichert.")
 end

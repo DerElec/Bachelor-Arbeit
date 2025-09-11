@@ -6,13 +6,13 @@ import pandas as pd
 import sympy as sp
 import os
 import tracing as tr
-Omega_start = 4
-Omega_end = 12
-Omega_step = 1000
+Omega_start = 0
+Omega_end = 10
+Omega_step = 0.1
 
 Delta_start = 1
-Delta_end = 4
-Delta_step = 0.1
+Delta_end = 10
+Delta_step =1000
 
 start_time = time.time()
 
@@ -34,7 +34,7 @@ results = []
 results_full = []
 
 for Omega in np.arange(Omega_start, Omega_end, Omega_step):    
-    for V in np.arange(-4, -0.5, 11):
+    for V in np.arange(-8, -0.05, 8):
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
         Gamma = 2  # Decay rate from first excited state to ground
@@ -172,20 +172,19 @@ for Omega in np.arange(Omega_start, Omega_end, Omega_step):
         
         Averiging_rate = 500
         t_last_x_values = sol.t[-Averiging_rate:]
-        averaged_vals = tr.calculate_avrg_vars(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], t_last_x_values)
-        variances = tr.calculate_variance(Averiging_rate, sol.y[2], sol.y[5], sol.y[6], averaged_vals, t_last_x_values)
+        averaged_vals,variances = tr.calculate_avrg_vars(Averiging_rate, [sol.y[2], sol.y[5], sol.y[6]], t_last_x_values)
         
         results_full.append([V] + averaged_vals + [eigenvals] + [trace] + [vals] + [startcond] + [variances])
         
     df_full_new = pd.DataFrame(results_full, columns=['V', '<0|0>', '<1|1>', '<2|2>', 'eigenvals', 'purity', 'additional params', 'startcond', 'Variances'])
     
-    if os.path.exists('results_full_3.pkl') and os.path.getsize('results_full_3.pkl') > 0:
-        df_full_existing = pd.read_pickle('results_full_3.pkl')
+    if os.path.exists('results_delta_1_060825.pkl') and os.path.getsize('results_delta_1_060825.pkl') > 0:
+        df_full_existing = pd.read_pickle('results_delta_1_060825.pkl')
         df_full_combined = pd.concat([df_full_existing, df_full_new], ignore_index=True)
     else:
         df_full_combined = df_full_new
     
-    df_full_combined.to_pickle('results_full_3.pkl')
+    df_full_combined.to_pickle('results_delta_1_060825.pkl')
     
     end_time = time.time()
     elapsed_time = end_time - start_time

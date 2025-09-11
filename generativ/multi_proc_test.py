@@ -13,8 +13,8 @@ import tracing as tr
 logging.basicConfig(filename='error.log', level=logging.ERROR)
 
 Omega_start = 0
-Omega_end = 12
-Omega_step = 1
+Omega_end = 10
+Omega_step = 0.1
 
 def is_positive_semidefinite(matrix):
     """Check if a matrix is positive semidefinite."""
@@ -28,7 +28,7 @@ def is_density_matrix_physical(rho):
 
 def compute(Omega):
     result_full = []
-    for V in np.arange(-8, -0.01, 1): 
+    for V in np.arange(-8, -0.05, 8): 
         delta_2 = 1
         kappa = 1  # cavity loss rate
         gamma = 1  # rate from cavity and atom coupling
@@ -140,14 +140,14 @@ def compute(Omega):
                                                      'var_<0|0>', 'var_<1|1>', 'var_<2|2>','var_<0|1>','var_<1|0>','var_<0|2>','var_<2|0>','var_<1|2>','var_<2|1>','var_a','var_a_dagger',]
                                )
         try:
-            lock = FileLock("stationary_140724.pkl.lock")
+            lock = FileLock("results_delta_1_060825_multi.pkl.lock")
             with lock:
-                if os.path.exists(f'stationary_140724.pkl'):
-                    df_existing = pd.read_pickle(f'stationary_140724.pkl')
+                if os.path.exists(f'results_delta_1_060825_multi.pkl'):
+                    df_existing = pd.read_pickle(f'results_delta_1_060825_multi.pkl')
                     df_combined = pd.concat([df_existing, df_step], ignore_index=True)
                 else:
                     df_combined = df_step
-                df_combined.to_pickle(f'stationary_140724.pkl')
+                df_combined.to_pickle(f'results_delta_1_060825_multi.pkl')
         except Exception as e:
             logging.error("Error occurred while saving results", exc_info=True)
         

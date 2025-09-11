@@ -75,56 +75,15 @@ def replace_lambda_q_p(*objects):
 
 
 
-dRtsRdt, R0,R,st,s_st,s_bt,s0,s_s0,s_b0,D_SS, D_SB, D_BS, D_BB,D_simplified,B,dxdt=sgdgl.create_all()
-G,sDs,Z,P,Q,Z_prime,W=struc_matr.run_all()
-# --- 1. Define non-commuting symbols for the operators ----------
-x_ops = sp.symbols('m1:9', commutative=False)  # x1 … x8
-q, p = sp.symbols('m9 m10', commutative=False)    # q, p
-F_ops = list(x_ops) + [q, p]                   # full vector F
-
-# --- 2. Build the 10 × 10 symbolic matrix K --------------------
-n = len(F_ops)
-# Helper: create a unique symbol ⟨A B⟩ for every pair (A,B)
-def second_moment_symbol(A, B):
-    return sp.Symbol(f'{A}{B}', real=True)   # expectation value ⟨A B⟩
-
-K = sp.Matrix([[second_moment_symbol(F_ops[i], F_ops[j])
-                for j in range(n)] for i in range(n)])
-
-# --- 3. Obtain the symmetrised covariance matrix Σ -------------
-Sigma = (K + K.T) / 2
 
 
 
-term1= G @ Sigma
-term2=Sigma @ G.T
-term3=W
-Sigma_dt=term1+term2+term3
 
-
-symbols_in_M = G.free_symbols          # {x, y, z}
-#  alternativ: symbols_in_M = M.atoms(sp.Symbol)
-g0, Delta1, V, gamma, Omega, kappa, eta, Delta2 = sp.symbols("g0 Delta1 V gamma Omega kappa eta Delta2")
-
-numeric_params = {
-    g0:     1,
-    Delta1: 1,
-    Delta2: 1,
-    V:      -8.0,
-    gamma:  1,
-    Omega:  8,
-    kappa:  1,
-    eta: 1
-
-}
-
-
-G,sDs,Z,P,Q,Z_prime,W,Sigma_dt=input_numerics(numeric_params,G,sDs,Z,P,Q,Z_prime,W,Sigma_dt)
 
 # s=transform_complex_S(s0)
 # sp.pprint(s)
 def get_traffo(lambda_vals):
-    C_num_sympy = skew.get_C_matrix(lambda_values)
+    C_num_sympy = skew.get_C_matrix(lambda_vals)
     C_complex = np.array(C_num_sympy.tolist(), dtype=complex)
 
     # Rufe die finale Funktion auf
@@ -134,6 +93,36 @@ def get_traffo(lambda_vals):
     final_C_complex = final_C_real * 1j
     return final_C_complex,J,R
 
-lambda_values = [1,5, 0, 5, 5, 5, 8, 4]
-JRsRJ,J,R=get_traffo(lambda_values)
+def get_important_matricies(numeric_params):
+    #dRtsRdt, R0,R,st,s_st,s_bt,s0,s_s0,s_b0,D_SS, D_SB, D_BS, D_BB,D_simplified,B,dxdt=sgdgl.create_all()
+    G,sDs,Z,P,Q,Z_prime,W=struc_matr.run_all()
+    # --- 1. Define non-commuting symbols for the operators ----------
+    x_ops = sp.symbols('m1:9', commutative=False)  # x1 … x8
+    q, p = sp.symbols('m9 m10', commutative=False)    # q, p
+    F_ops = list(x_ops) + [q, p]                   # full vector F
+
+    # --- 2. Build the 10 × 10 symbolic matrix K --------------------
+    n = len(F_ops)
+    # Helper: create a unique symbol ⟨A B⟩ for every pair (A,B)
+    def second_moment_symbol(A, B):
+        return sp.Symbol(f'{A}{B}', real=True)   # expectation value ⟨A B⟩
+
+    K = sp.Matrix([[second_moment_symbol(F_ops[i], F_ops[j])
+                    for j in range(n)] for i in range(n)])
+
+    # --- 3. Obtain the symmetrised covariance matrix Σ -------------
+    Sigma = (K + K.T) / 2
+
+
+
+    term1= G @ Sigma
+    term2=Sigma @ G.T
+    term3=W
+    Sigma_dt=term1+term2+term3
+
+    #  alternativ: symbols_in_M = M.atoms(sp.Symbol)
+
+
+    return input_numerics(numeric_params,G,sDs,Z,P,Q,Z_prime,W,Sigma_dt,Sigma,K)
+
 

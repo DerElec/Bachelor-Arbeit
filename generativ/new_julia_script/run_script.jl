@@ -29,8 +29,8 @@ println("Output folder created: ", output_dir)
 ################################################################################
 # Define the Gamma range parameters:
 # Here you can choose the start, stop and step size for Gamma.
-gamma_min = 0.0
-gamma_max = 3.0
+gamma_min = 1
+gamma_max = 1
 gamma_step = 0.5
 gamma_range = collect(gamma_min:gamma_step:gamma_max)
 
@@ -41,8 +41,8 @@ base_params = (
     gamma  = 1.0,     # used also as g₀ in the analytical boundary expression
     Gamma  = 1.0,     # will be overwritten by gamma_range value
     Omega  = 8.0,     # initial value (will be overwritten in the parameter scan)
-    delta1 = 1.0,
-    delta2 = 1.0,
+    delta1 = 0.0,
+    delta2 = 0.0,
     eta    = 1.0,
     V      = -8.0     # initial value (will be overwritten in the parameter scan)
 )
@@ -50,7 +50,7 @@ base_params = (
 ################################################################################
 # Define time span for the simulation
 t0 = 0.0
-t_end = 2000.0
+t_end = 5000.0
 tspan = (t0, t_end)
 
 ################################################################################
@@ -63,8 +63,8 @@ simulations = [
 
 ################################################################################
 # Define parameter ranges for Omega and V.
-omega_values = collect(range(0, stop=8, length=50))   # x-axis values for Omega
-v_values     = collect(range(-16.0, stop=-0, length=50))  # y-axis values for V
+omega_values = collect(range(0, stop=8, length=200))   # x-axis values for Omega
+v_values     = collect(range(-8.0, stop=8, length=200))  # y-axis values for V
 
 # Function to compute the analytical V line as a function of Omega:
 function compute_v_line(omega_vals, params)
@@ -211,7 +211,7 @@ for gamma_val in gamma_range
         end
         
         # Define the output HDF5 filename for this Gamma value
-        h5_filename = joinpath(output_dir, new_sim_label * "_data.h5")
+        h5_filename = joinpath(output_dir, new_sim_label * "_data_delta_zero.h5")
         
         # Save the data into the HDF5 file
         h5open(h5_filename, "w") do file
