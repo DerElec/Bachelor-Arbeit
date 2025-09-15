@@ -255,10 +255,10 @@ def run_all():
     mP = sp.symbols('m1:11')
     #F = sp.symbols('F1:11')
     g0, V_const = sp.symbols('g0 V')
-    Delta1, Omega, N, eta = sp.symbols('Delta1 Omega N eta')
+    Delta1,Delta2, Omega, N, eta = sp.symbols('Delta1 Delta2 Omega N eta')
 
     h9 = g0; h10 = -g0; h88 = V_const/3
-    omega = [0,0,-Delta1,0,0,Omega,0,-V_const/(3*sp.sqrt(3)),0,2*sp.sqrt(N)*eta]
+    omega = [0,0,-Delta1,0,0,Omega,0,-2*V_const/(3*sp.sqrt(3))-(2/sp.sqrt(3))*Delta2,0,2*sp.sqrt(N)*eta]
 
     f_P = lambda g,a,c: f_sym(g,a,c) if g<=8 and a<=8 and c<=8 else 0
 
@@ -285,7 +285,7 @@ def run_all():
             if G<=8:
                 coeff += -h88*4*mP[7]*f_P(8,a,G)
             if G<=8:
-                for i in range(1,9): coeff += -2*omega[i-1]*f_P(i,a,G)
+                for i in range(1,9): coeff += -omega[i-1]*f_P(i,a,G)#*2 - ACHTUNG HIER BEARBEITET
             P[a-1,G-1] = sp.factor(coeff)#*F[G-1]
 
     # -----------------------------

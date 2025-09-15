@@ -87,7 +87,7 @@ def _transform_real_skew_matrix(C_real):
     return final_C, J, M
 
 def transform_complex_S(S_complex):
-    # ... (keine Änderung)
+
     if not np.allclose(np.real(S_complex), 0):
         raise ValueError("Die Eingabematrix C muss rein imaginär sein.")
 
