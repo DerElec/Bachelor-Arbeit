@@ -849,107 +849,6 @@ def check_symmetry(M):
         return "antisymmetric"
     else:
         return "neither"
-    
-
-# Python code (comments in English; console/output in German)
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-# --- (Fallback) If not already defined in your session, keep these helpers: ---
-def A_m_to_rho() -> np.ndarray:
-    """
-    Linear map A (10x10) that converts m = [x1..x8, Q, P] to
-    y = [Re ρ01, Im ρ01, Re ρ02, Im ρ02, Re ρ12, Im ρ12, ρ00, ρ11, Q, P].
-    Covariances transform as:  Σ_y = A Σ_m A^T
-    """
-    A = np.zeros((10, 10), dtype=float)
-    # coherences
-    A[0, 0] = 0.5  # Re ρ01 = x1/2
-    A[1, 1] = 0.5  # Im ρ01 = x2/2
-    A[2, 3] = 0.5  # Re ρ02 = x4/2
-    A[3, 4] = 0.5  # Im ρ02 = x5/2
-    A[4, 5] = 0.5  # Re ρ12 = x6/2
-    A[5, 6] = 0.5  # Im ρ12 = x7/2
-    # populations (linear part; constants drop out in covariances)
-    A[6, 2] = 0.5           # ρ00 ~ +x3/2
-    A[6, 7] = np.sqrt(3)/6  # ρ00 ~ +x8*√3/6
-    A[7, 2] = -0.5          # ρ11 ~ -x3/2
-    A[7, 7] = np.sqrt(3)/6  # ρ11 ~ +x8*√3/6
-    # field quadratures
-    A[8, 8] = 1.0           # Q
-    A[9, 9] = 1.0           # P
-    return A
-
-def reconstruct_sigma_series(sol, idx, take_real=True):
-    """Rebuild Σ(t_k) (10x10) from packed pair entries in sol.y using idx['pairs_order']."""
-    n = idx["singles_slice"].stop - idx["singles_slice"].start  # = 10
-    pair_start = idx["pairs_slice"].start
-    pairs_order = idx["pairs_order"]
-    nt = sol.y.shape[1]
-    Sigmas = np.zeros((nt, n, n), dtype=complex)
-    for k_loc, (i, j, _sym) in enumerate(pairs_order):
-        row = pair_start + k_loc
-        traj = sol.y[row, :]
-        Sigmas[:, i, j] = traj
-        Sigmas[:, j, i] = np.conjugate(traj)
-    if take_real:
-        Sigmas = np.real(Sigmas)
-    return Sigmas
-
-def sigma_rho_series_from_sigma(Sigmas_m: np.ndarray) -> np.ndarray:
-    """Compute Σ_rho(t) = A Σ_m(t) A^T for all times."""
-    A = A_m_to_rho()
-    return np.einsum("ij,tjk,lk->til", A, Sigmas_m, A)
-
-# --- Core function: compute and plot correlations of populations with Q and P ---
-def plot_population_QP_correlations(sol, idx, use_real=True, figsize=(7.2, 4.4)):
-    """
-    Compute Σ(t) in m-order [x1..x8,Q,P], transform to rho-near basis y, and
-    plot Cov(rho00, Q/P) and Cov(rho11, Q/P) vs time.
-    - use_real=True enforces real symmetric covariances before transform.
-    """
-    # 1) Reconstruct Σ_m(t) from the packed state
-    Sigmas_m = reconstruct_sigma_series(sol, idx, take_real=use_real)
-
-    # 2) Transform to rho-near basis: y = [Reρ01, Imρ01, Reρ02, Imρ02, Reρ12, Imρ12, ρ00, ρ11, Q, P]
-    Sigma_rho = sigma_rho_series_from_sigma(Sigmas_m)
-
-    # 3) Extract the needed covariances (time series)
-    # Indices in y-basis:
-    i_r00, i_r11, i_Q, i_P = 6, 7, 8, 9
-    t_vals = sol.t
-    cov_r00_Q = Sigma_rho[:, i_r00, i_Q]
-    cov_r00_P = Sigma_rho[:, i_r00, i_P]
-    cov_r11_Q = Sigma_rho[:, i_r11, i_Q]
-    cov_r11_P = Sigma_rho[:, i_r11, i_P]
-
-    # 4) Plots
-    plt.figure(figsize=figsize)
-    plt.plot(t_vals, cov_r00_Q, label=r'Cov($\rho_{00}$, $Q$)')
-    plt.plot(t_vals, cov_r00_P, label=r'Cov($\rho_{00}$, $P$)', linestyle="--")
-    plt.xlabel("Zeit"); plt.ylabel("Kovarianz"); plt.title("Korrelationen: ρ00 mit Q und P")
-    plt.legend(); plt.tight_layout(); plt.show()
-
-    plt.figure(figsize=figsize)
-    plt.plot(t_vals, cov_r11_Q, label=r'Cov($\rho_{11}$, $Q$)')
-    plt.plot(t_vals, cov_r11_P, label=r'Cov($\rho_{11}$, $P$)', linestyle="--")
-    plt.xlabel("Zeit"); plt.ylabel("Kovarianz"); plt.title("Korrelationen: ρ11 mit Q und P")
-    plt.legend(); plt.tight_layout(); plt.show()
-
-    print("Fertig: Korrelationen geplottet (ρ00↔Q/P und ρ11↔Q/P).")
-
-    # 5) Return arrays for further processing if needed
-    return {
-        "t": t_vals,
-        "cov_r00_Q": cov_r00_Q,
-        "cov_r00_P": cov_r00_P,
-        "cov_r11_Q": cov_r11_Q,
-        "cov_r11_P": cov_r11_P,
-        "Sigma_rho": Sigma_rho,   # full series in rho-basis (optional)
-    }
-
-
 def plot_sigma_rho_pairs(Sigma_rho: np.ndarray, t: np.ndarray, pairs: Sequence[Tuple[int,int]], names: Optional[Sequence[str]] = None):
     """
     Plot trajectories of selected off-diagonals in the rho-near basis.
@@ -970,17 +869,11 @@ def plot_sigma_rho_pairs(Sigma_rho: np.ndarray, t: np.ndarray, pairs: Sequence[T
 
 if __name__ == "__main__":
     print("Baue kombiniertes Singles+Kovarianz-System …")
-    regular_plots=True
-    # --- (1) Symbols, sizes
-    
-    # (H) Integrate
-    t_span = (0.0, 5000.0)
-    t_eval = np.linspace(*t_span, 2001)
     n = 10
     mP_syms = sp.symbols('m1:11')  # m1..m8 = x1..x8, m9=Q, m10=P
     g0, Delta1, V, gamma, Omega, kappa, eta, Delta2 = sp.symbols("g0 Delta1 V gamma Omega kappa eta Delta2")
     V_val=-1/2*((8/(4))**2+1)
-    numeric_params = { g0:1, Delta1:1, Delta2:1, V:V_val, gamma:2, Omega:5, kappa:1, eta:1 }
+    numeric_params = { g0:1, Delta1:1, Delta2:1, V:V_val, gamma:2, Omega:8, kappa:1, eta:1 }
 
     G,sDs,Z,P,Q,Z_prime,W,Sigma_dt,Sigma,K=covar.get_important_matricies(numeric_params)
     
@@ -989,128 +882,24 @@ if __name__ == "__main__":
 
     # (A) We assume Sigma_dt already has the correct symbolic form and ordering
     Sigma_dt_clean = Sigma_dt
-    
-    #print("PSD ?",is_psd_numeric(W))
-    #sp.pprint(W_sym)
-    #sp.pprint(Sigma_dt_sym)
-    #print("W",check_symmetry(W))
-    #print("dSigma_dt",check_symmetry(Sigma_dt))
-    #print("P",check_symmetry(P))
-
-    #(B) Prepare pair system (no extra params if Sigma_dt is already numeric in phys. params)
-    idx, rhs_pairs_func = prepare_system_for_solve_ivp(
-        mP_syms=mP_syms,
-        Sigma_dt=Sigma_dt_clean,
-        symmetric_pairs=True,
-        extra_params=()     # if Sigma_dt still contains parameters, pass them here instead
-    )
-
-    # (C) Singles-phys. Parameter (für deine Singles-RHS)
-    params = dict(
-        g0=1,kappa=1.0, gamma=1.0, Gamma=2.0,
-        Omega=5.0, delta1=1.0, delta2=1.0,
-        eta=1.0, V=V_val#-8.0
-    )
-
-    # (D) Build combined RHS
-    fun = make_combined_rhs(idx, rhs_pairs_func, params_dict=params, extra_param_values_tuple=())
-
-    # (E) Initial conditions
-    # 11-d ket IC -> x-space -> m-order [x1..x8, Q, P]
+    # --- Build initial singles state (uncomment your block or use this minimal one) ---
+    # Your original:
     y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
-    x0 = convert_state(y0_ket)  # [Q,P,x1..x8]
-    m0_singles = np.array([*x0[2:10], x0[0], x0[1]], dtype=complex)
+    x0 = convert_state(y0_ket)                   # [Q, P, x1..x8]
+    m0_singles = np.array([*x0[2:10], x0[0], x0[1]], dtype=complex)  # [x1..x8, Q, P]
 
-    # Covariance IC Σ(0)
-    Σ0 = initial_covariance_from_state(m0_singles, atom_scale=1.0, boson_scale=1.0)
-    m0_pairs = pack_upper_triangle_from_covariance(Σ0, idx["pairs_order"])
+    # --- Build a name->value map for substituting symbols in W ---
+    nameval = _nameval_from_numeric_params(numeric_params, m_vec=m0_singles)
 
-    y0 = np.concatenate([m0_singles, m0_pairs])
+    # --- Evaluate W at the initial state (use the symbolic W if available) ---
+    # Prefer W_sym here (pure symbolic form). If you only have numeric W, use that.
+    W_num = _matrix_to_numeric(W_sym, nameval)   # -> numpy.float64 array
 
-    # (F) Smoke-test: rhs_pairs_func must accept a flat state -> returns correct length
-    y_len = len(idx["state_symbols"])
-    try:
-        _ = rhs_pairs_func(*([0.0]*y_len))
-        print("Lambdify-Test OK – Länge z-Ausgabe =", len(_))
-    except Exception as e:
-        print("Lambdify-Test FEHLER:", repr(e))
+    # --- Symmetrize (just in case) and PSD test ---
+    W_sympart = 0.5 * (W_num + W_num.T)
+    w = np.linalg.eigvalsh(W_sympart)
+    ok = (w.min() >= -1e-12)
 
-    # (G) Numerical RHS check at t=0 (optional)
-    print("\n===== Numerischer RHS-Check bei t=0 =====")
-    dy_singles0 = singles_rhs_from_m_order(0.0, y0[idx["singles_slice"]], params)
-    dy_pairs0   = np.asarray(rhs_pairs_func(*y0.tolist()))
-    print("Singles @0:", dy_singles0)
-    print("Erste 10 Paar-Ableitungen @0:", dy_pairs0[:10])
-
-
-    print("Starte Integration mit solve_ivp …")
-    sol = solve_ivp(fun, t_span, y0, t_eval=t_eval, method="RK45", rtol=1e-8, atol=1e-8)
-
-
-    if sol.success:
-        series = compute_JRSRJ_fast(sol, step=1)
-        print_JRSRJ_first_last(series)
-        SJR = compute_SJR_fast(sol, step=1, compute_JR=True)
-        # ============================
-        # Verwendung nach deiner Integration + SJR
-        # ============================
-        Sigmas = reconstruct_sigma_series(sol, idx, take_real=True)
-        Sigma_tilde = transform_sigma_series(Sigmas, SJR)
-
-            # 1) PSD-Checks (original & transformiert)
-        print("PSD-Check für Σ(t) …")
-        mins_S, bad_S = check_psd_series(Sigmas, sol.t, name="Σ", tol=1e-12, do_plot=True)
-
-        print("PSD-Check für Σ̃(t) …")
-        mins_St, bad_St = check_psd_series(Sigma_tilde, SJR["t"], name="Σ̃", tol=1e-12, do_plot=True)
-   
-        # 2) Rücktransformation: Kovarianzen in einer rho-nahen Ebene
-        Sigma_rho = sigma_rho_series_from_sigma(Sigmas)  # nutzt Σ in m=[x1..x8,Q,P]
-        names_rho = ["Reρ01","Imρ01","Reρ02","Imρ02","Reρ12","Imρ12","ρ00","ρ11","Q","P"]
-
-        # Beispielplots der zeitlichen Korrelationen:
-        # - Q mit Re(ρ01) und Im(ρ01)
-        plot_sigma_rho_pairs(Sigma_rho, sol.t, pairs=[(8,0), (8,1)], names=names_rho)
-        # - Q, P mit den Populations-Kovarianzen
-        plot_sigma_rho_pairs(Sigma_rho, sol.t, pairs=[(8,6), (9,7)], names=names_rho)
-        names = ["x1","x2","x3","x4","x5","x6","x7","x8","Q","P"]
-        # 1) Alle Diagonalen (Variancen) plotten
-        #plot_sigma_tilde_diagonals(Sigma_tilde, SJR["t"], names=names)
-
-        # 2) Beispiel Off-Diagonalen: x3–x7 und Q–P
-        plot_sigma_tilde_pairs(Sigma_tilde, SJR["t"], pairs=[(7,9), (7,8)], names=names)
-
-        # 3) Optional: nur bestimmte Diagonalen (z. B. x1,x2,Q,P)
-        #plot_sigma_tilde_diagonals(Sigma_tilde, SJR["t"], names=names, indices=[0,1,8,9])
-
-        plot_sigma_tilde_pairs(Sigma_tilde, SJR["t"], pairs=[(6,7)], names=names)
-
-    #(I) Plots
-    if sol.success and regular_plots:
-        # Populations aus Singles
-        t_vals = sol.t
-        Q = sol.y[8, :]
-        P = sol.y[9, :]
-        x1_to_x8 = [sol.y[i, :] for i in range(8)]
-        x_stream = np.vstack([Q, P, *x1_to_x8])  # 0:Q,1:P,2:x1,...,9:x8
-
-        sqrt3 = np.sqrt(3.0)
-        x3 = x_stream[4, :]
-        x8_ = x_stream[9, :]
-        sum00_11 = (2 + sqrt3 * x8_) / 3
-        rho00 = np.real((sum00_11 + x3)/2)
-        rho11 = np.real((sum00_11 - x3)/2)
-        rho22 = 1 - rho00 - rho11
-
-        plt.figure(figsize=(6,4))
-        plt.plot(t_vals, rho00, label=r'$\rho_{00}$')
-        plt.plot(t_vals, rho11, label=r'$\rho_{11}$')
-        plt.plot(t_vals, rho22, label=r'$\rho_{22}$')
-        plt.plot(t_vals, rho00+rho11+rho22, '--', color='gray', label='Spur')
-        plt.xlabel('Zeit'); plt.ylabel('Population'); plt.legend(); plt.tight_layout()
-
-        # Diagonale Fluktuationen m_i m_i
-        plot_diagonal_fluctuations(idx, sol, names=["x1","x2","x3","x4","x5","x6","x7","x8","Q","P"])
-        plt.show()
-    else:
-        print("Integration fehlgeschlagen:", sol.message)
+    print("=== PSD-Test von W am Initialzustand ===")
+    print("min λ( sym(W) ) =", f"{w.min(): .3e}")
+    print("PSD ?", "JA" if ok else "NEIN")

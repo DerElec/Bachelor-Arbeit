@@ -285,7 +285,7 @@ def run_all():
             if G<=8:
                 coeff += -h88*4*mP[7]*f_P(8,a,G)
             if G<=8:
-                for i in range(1,9): coeff += -omega[i-1]*f_P(i,a,G)#*2 - ACHTUNG HIER BEARBEITET
+                for i in range(1,9): coeff += -omega[i-1]*f_P(i,a,G)*2# - ACHTUNG HIER BEARBEITET
             P[a-1,G-1] = sp.factor(coeff)#*F[G-1]
 
     # -----------------------------
@@ -323,9 +323,6 @@ def run_all():
     # Matrix G = P + sE + Q
     # -----------------------------
     sE = kappa * compute_sE()
-
-    G = P + sE + Q
-
     def compute_Z_prime_new():
         """
         NEW Z' with conjugate pairing so that Im((Z'+Z'.T)/2) cancels.
@@ -368,10 +365,11 @@ def run_all():
         return Zp
 
 
+    G = P + sE + Q
 
     Z_prime=compute_Z_prime_new()
     Z=sp.simplify((Z_prime+Z_prime.T)/2)
-    W=sE+Z
+    W=sDs+Z
     print("done computing Z, Z', sDs, Q, G ...")
     return G,sDs,Z,P,Q,Z_prime,W
 
