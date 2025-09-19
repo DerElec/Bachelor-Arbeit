@@ -3,8 +3,8 @@ if __name__ == "__main__":
     import numpy as np
     from multi_omega_v_unified_fixed import run_grid, SolveConfig, PhysParams
 
-    omega_values = np.linspace(4.0, 6.0, 3)      # [4.0, 5.0, 6.0]
-    v_values     = np.linspace(-2.0, -4.0, 6)    # [-2.0, -2.4, ..., -4.0]
+    omega_values = np.linspace(0.0, 12.0, 120)      # [4.0, 5.0, 6.0]
+    v_values     = np.linspace(8.0, -8.0, 160)    # [-2.0, -2.4, ..., -4.0]
 
     cfg = SolveConfig(
         params=PhysParams(

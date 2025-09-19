@@ -192,17 +192,17 @@ if __name__ == '__main__':
     plt.show()
 
     # print(f"Ausführungsdauer: {dauer:.2f} Sekunden")
-    x = sol.y[:, -1]   # Länge 10: [Q, P, x1, x2, x3, x4, x5, x6, x7, x8]
-    m = x[2:]
-    C_num_sympy = symplect.get_S_matrix_gellman(m)
-    S = np.array(C_num_sympy.tolist(), dtype=complex)
-    final_result,J,R=symplect.transform_complex_S(S)
-    JRSRJ=symplect.expand_to_10x10(1j*final_result)
-    R=symplect.expand_to_10x10(R)
-    J=symplect.expand_to_10x10(J)
-    sp.pprint(sp.Matrix(symplect.expand_to_10x10_sym(final_result)))
-    sp.pprint(sp.Matrix(J))
-    sp.pprint(sp.Matrix(R))
+    # x = sol.y[:, -1]   # Länge 10: [Q, P, x1, x2, x3, x4, x5, x6, x7, x8]
+    # m = x[2:]
+    # C_num_sympy = symplect.get_S_matrix_gellman(m)
+    # S = np.array(C_num_sympy.tolist(), dtype=complex)
+    # final_result,J,R=symplect.transform_complex_S(S)
+    # JRSRJ=symplect.expand_to_10x10(1j*final_result)
+    # R=symplect.expand_to_10x10(R)
+    # J=symplect.expand_to_10x10(J)
+    # sp.pprint(sp.Matrix(symplect.expand_to_10x10_sym(final_result)))
+    # sp.pprint(sp.Matrix(J))
+    # sp.pprint(sp.Matrix(R))
 
 
 

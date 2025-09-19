@@ -95,7 +95,7 @@ def get_traffo(lambda_vals):
 
 def get_important_matricies(numeric_params):
     #dRtsRdt, R0,R,st,s_st,s_bt,s0,s_s0,s_b0,D_SS, D_SB, D_BS, D_BB,D_simplified,B,dxdt=sgdgl.create_all()
-    G,sDs,Z,P,Q,Z_prime,W=struc_matr.run_all()
+    G,sDs,Z,P,Q,sE,Z_prime,W=struc_matr.run_all()
     # --- 1. Define non-commuting symbols for the operators ----------
     x_ops = sp.symbols('m1:9', commutative=False)  # x1 … x8
     q, p = sp.symbols('m9 m10', commutative=False)    # q, p
@@ -123,14 +123,14 @@ def get_important_matricies(numeric_params):
     #  alternativ: symbols_in_M = M.atoms(sp.Symbol)
 
 
-    return input_numerics(numeric_params,G,sDs,Z,P,Q,Z_prime,W,Sigma_dt,Sigma,K)
+    return input_numerics(numeric_params,G,sDs,Z,P,Q,sE,Z_prime,W,Sigma_dt,Sigma,K)
 
 
 
 
 def get_important_matricies_symbol():
     #dRtsRdt, R0,R,st,s_st,s_bt,s0,s_s0,s_b0,D_SS, D_SB, D_BS, D_BB,D_simplified,B,dxdt=sgdgl.create_all()
-    G,sDs,Z,P,Q,Z_prime,W=struc_matr.run_all()
+    G,sDs,Z,P,Q,sE,Z_prime,W=struc_matr.run_all()
     # --- 1. Define non-commuting symbols for the operators ----------
     x_ops = sp.symbols('m1:9', commutative=False)  # x1 … x8
     q, p = sp.symbols('m9 m10', commutative=False)    # q, p
@@ -158,4 +158,4 @@ def get_important_matricies_symbol():
     #  alternativ: symbols_in_M = M.atoms(sp.Symbol)
 
 
-    return G,sDs,Z,P,Q,Z_prime,W,Sigma_dt,Sigma,K
+    return G,sDs,Z,P,Q,sE,Z_prime,W,Sigma_dt,Sigma,K

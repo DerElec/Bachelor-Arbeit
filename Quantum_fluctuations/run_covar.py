@@ -4,353 +4,117 @@ import numpy as np
 import sympy as sp
 from scipy.integrate import solve_ivp
 import run_script as singlets
-from run_script import convert_state,rhs_gellmann_qp_from_ket,rhs_gellmann_qp_from_x
+from run_script import convert_state, rhs_gellmann_qp_from_ket, rhs_gellmann_qp_from_x
 import matplotlib.pyplot as plt
+from typing import Sequence, Optional, Tuple, Dict
+
 import covar_everything as covar
 import symplectic_matrix as symplect
-from typing import Sequence, Optional, Tuple, Dict
-import re
 
-def _nameval_from_numeric_params(numeric_params: dict, m_vec: np.ndarray | None = None) -> dict[str, float]:
+
+# ============================================================
+# === Symplectic form s from singles in m-order = [x1..x8,Q,P]
+# ============================================================
+
+def su3_f_tensor() -> np.ndarray:
     """
-    Build a name->float map from numeric_params (keys are sympy.Symbols)
-    and optionally from the current singles vector m = [x1..x8,Q,P].
+    Return f[a,b,c] for SU(3) in the standard Gell-Mann basis (a,b,c = 0..7 for λ1..λ8).
+    Only ascending triples are set positive; all others follow by total antisymmetry.
     """
-    nameval: dict[str, float] = {}
-    # symbols from numeric_params
-    for sym, val in numeric_params.items():
-        try:
-            nameval[sym.name] = float(val)
-        except Exception:
-            nameval[sym.name] = float(sp.N(val))
-    # current singles m1..m10 (if provided)
-    if m_vec is not None:
-        m_vec = np.asarray(m_vec).reshape(-1)
-        for i in range(min(10, len(m_vec))):
-            # we nehmen den Realteil – Kovarianz/Drift ist in deiner Pipeline reell
-            nameval[f"m{i+1}"] = float(np.real(m_vec[i]))
-    return nameval
+    f = np.zeros((8, 8, 8), dtype=float)
 
-def _matrix_to_numeric(M, nameval: dict[str, float]) -> np.ndarray:
+    # Positive base (ascending index triples; 1-based in literature -> 0-based here):
+    pos = [
+        (0,1,2, 1.0),                        # f_{123} = 1
+        (0,3,6, 0.5), (1,3,5, 0.5), (1,4,6, 0.5),
+        (2,3,4, 0.5), (2,5,6, 0.5),
+        (3,4,7, np.sqrt(3)/2.0),
+        (5,6,7, np.sqrt(3)/2.0)
+    ]
+
+    # Fill ascending entries, then enforce full antisymmetry
+    for (i, j, k, val) in pos:
+        f[i, j, k] = val
+
+    # Total antisymmetry over all permutations
+    def sign_of_permutation(triple, perm):
+        a, b, c = triple
+        x, y, z = perm
+        s = 1
+        arr = [a, b, c]
+        if arr[0] != x:
+            j = arr.index(x); arr[0], arr[j] = arr[j], arr[0]; s *= -1
+        if arr[1] != y:
+            j = arr.index(y); arr[1], arr[j] = arr[j], arr[1]; s *= -1
+        return s
+
+    from itertools import permutations
+    for (i, j, k, val) in pos:
+        base = (i, j, k)
+        for p in set(permutations(base, 3)):
+            f[p] = sign_of_permutation(base, p) * val
+
+    return f
+
+
+def symplectic_from_singles(singles: np.ndarray, *, scale_su3: float = 2.0) -> np.ndarray:
     """
-    Convert a (possibly symbolic) matrix M to a numeric numpy array by simultaneous name-based substitution.
-    - Supports SymPy matrices with free symbols like Delta1, Delta2, m1..m10, etc.
-    - Raises a helpful error if some names could not be substituted.
+    Build the real 10x10 symplectic form s = -i<[F_a,F_b]> for F=[λ1..λ8, Q, P].
+      - singles[0..7] are <λ1>.. <λ8> (Gell-Mann expectations),
+      - singles[8], singles[9] are <Q>, <P> (not used in the SU(3) block).
+    Conventions:
+      [λ_i, λ_j] = 2i f_{ijk} λ_k  -> s_ij = 2 f_{ijk} <λ_k> = scale_su3 * sum_k f_{ijk} * x_k
+      [Q,P] = i                    -> s_QP = +1, s_PQ = -1
+      Cross (λ_i with Q,P) = 0
+    Returns: s (10x10 real, skew-symmetric).
     """
-    if isinstance(M, sp.MatrixBase):
-        free: set[sp.Symbol] = set(M.free_symbols)
-        if free:
-            # map every free symbol by name
-            subs_pairs = []
-            missing = []
-            for s in free:
-                v = nameval.get(s.name, None)
-                if v is None:
-                    missing.append(s.name)
-                else:
-                    subs_pairs.append((s, v))
-            if missing:
-                raise ValueError(f"Fehlende Substitutionen für Symbole: {sorted(set(missing))}")
-            M_num = M.subs(subs_pairs, simultaneous=True)
-        else:
-            M_num = M
-        M_num = sp.N(M_num)
-        return np.array(M_num.tolist(), dtype=float)
-    else:
-        # assume already numeric-like
-        return np.array(M, dtype=float)
+    singles = np.asarray(singles, dtype=float)
+    if singles.shape[0] < 10:
+        raise ValueError("Expected singles of length >= 10: [x1..x8, Q, P].")
 
-def sym_min_eig_num(M, nameval: dict[str, float]) -> float:
-    """Smallest eigenvalue of the symmetric real part of M after numeric substitution."""
-    Mn = _matrix_to_numeric(M, nameval)
-    Ms = 0.5 * (Mn + Mn.T)
-    return float(np.linalg.eigvalsh(Ms).min())
+    x = singles[:8]  # <λ_k>
+    f = su3_f_tensor()
 
-def print_block_psd_report(G, sDs, Z, sE, W, nameval: dict[str, float]):
-    print("\n=== PSD-Report der Bausteine ===")
-    print("min λ( sym(sDs) ) =", f"{sym_min_eig_num(sDs, nameval): .3e}")
-    print("min λ( sym(Z)   ) =", f"{sym_min_eig_num(Z,   nameval): .3e}")
-    print("min λ( sym(sE)  ) =", f"{sym_min_eig_num(sE,  nameval): .3e}")
-    print("min λ( sym(W)   ) =", f"{sym_min_eig_num(W,   nameval): .3e}", "  <-- aktuelles 'D'? sollte ≥ 0 sein")
+    # SU(3) 8x8 block: s_ij = scale_su3 * sum_k f_{ijk} x_k
+    C = np.zeros((8, 8), dtype=float)
+    for i in range(8):
+        C[i, :] = (scale_su3 * (f[i, :, :] @ x)).astype(float)
+    # ensure skew-symmetry numerically
+    C = 0.5 * (C - C.T)
+
+    # QP block (2x2)
+    B = np.array([[0.0, 1.0],
+                  [-1.0, 0.0]], dtype=float)
+
+    # Assemble 10x10
+    S = np.zeros((10, 10), dtype=float)
+    S[:8, :8] = C
+    S[8:, 8:] = B
+    return S
 
 
-def su3_f_tensor():
-    f = {}
-    base = {
-        (0,1,2): 1.0,
-        (0,3,6): 0.5,  (1,3,5): 0.5,  (1,4,6): -0.5,
-        (2,3,4): 0.5,  (2,5,6): 0.5,
-        (3,4,7): np.sqrt(3)/2.0,
-        (5,6,7): -np.sqrt(3)/2.0,
-    }
-    f_full = np.zeros((8,8,8), dtype=float)
-    def set_trip(a,b,c,val):
-        f_full[a,b,c] = val
-        f_full[b,a,c] = -val
-    for (a,b,c), val in base.items():
-        set_trip(a,b,c,val)
-    return f_full
-
-F_TENSOR = su3_f_tensor()
-# Python code (comments in English; console/output in German)
-import numpy as np
-import matplotlib.pyplot as plt
-
-def plot_sigma_tilde_diagonals(Sigma_tilde, t_eff, names=None, indices=None, ylim=None):
+def symplectic_series_from_solution(sol, idx, *, scale_su3: float = 2.0) -> np.ndarray:
     """
-    Plot trajectories of diagonal entries Σ̃_ii(t).
-    - Sigma_tilde: array (nt, 10, 10)
-    - t_eff: time vector (nt,)
-    - names: list of 10 labels; default ['x1',...,'x8','Q','P']
-    - indices: list of i to plot (0-based). Default = all 0..9
-    - ylim: tuple (ymin, ymax) or None
+    Build s(t_k) for all time points of 'sol' using singles(t_k) and the commutator definition.
+    - idx['singles_slice'] must select the first 10 entries [x1..x8,Q,P] from state y.
+    Returns: array with shape (nt, 10, 10), real and skew-symmetric.
     """
-    nt, n, _ = Sigma_tilde.shape
-    if names is None:
-        names = [f"x{i+1}" for i in range(8)] + ["Q", "P"]
-    if indices is None:
-        indices = list(range(n))
+    sl = idx["singles_slice"]
+    Y = sol.y.T  # shape (nt, nstate)
+    singles_series = Y[:, sl]  # (nt, 10)
 
-    plt.figure(figsize=(7.2, 4.4))
-    for i in indices:
-        yi = Sigma_tilde[:, i, i]
-        # Σ̃ sollte reell-symmetrisch sein; falls doch komplex, Realteil plotten
-        plt.plot(t_eff, np.real(yi), label=f"{names[i]}{names[i]}")
-    if ylim is not None:
-        plt.ylim(*ylim)
-    plt.xlabel("Zeit")
-    plt.ylabel("Σ̃$_{ii}$")
-    plt.title("Trajektorien der Diagonalen von Σ̃(t)")
-    plt.legend(ncol=2, fontsize=8)
-    plt.tight_layout()
-    plt.show()
-
-def plot_sigma_tilde_pairs(Sigma_tilde, t_eff, pairs, names=None):
-    """
-    Plot trajectories of selected off-diagonals Σ̃_ij(t) (real & imag if present).
-    - pairs: list of (i,j) with 0-based indices
-    - names: labels for 10 components; default ['x1',...,'x8','Q','P']
-    """
-    if names is None:
-        names = [f"x{i+1}" for i in range(8)] + ["Q", "P"]
-
-    plt.figure(figsize=(7.2, 4.4))
-    for (i, j) in pairs:
-        yij = Sigma_tilde[:, i, j]
-        lab = f"{names[i]}{names[j]}"
-        plt.plot(t_eff, np.real(yij), label=f"Re[{lab}]")
-        if np.any(np.abs(np.imag(yij)) > 0):
-            plt.plot(t_eff, np.imag(yij), "--", label=f"Im[{lab}]")
-    plt.xlabel("Zeit")
-    plt.ylabel("Σ̃$_{ij}$")
-    plt.title("Ausgewählte Off-Diagonalen von Σ̃(t)")
-    plt.legend(ncol=2, fontsize=8)
-    plt.tight_layout()
-    plt.show()
-
-def C_from_x_fast(x8):
-    xc = np.real(np.asarray(x8, dtype=float))
-    C_real = 2.0 * np.einsum('abc,c->ab', F_TENSOR, xc)
-    return 1j * C_real  # purely imaginary
-def S10_from_C8(C8):
-    """Embed 8×8 C8 in 10×10 und füge den kanonischen QP-Block ein."""
-    S10 = np.zeros((10, 10), dtype=complex)
-    S10[:8, :8] = C8
-    S10[8, 9] = 1.0
-    S10[9, 8] = -1.0
-    return S10
-def compute_JRSRJ_fast(sol, step=1):
-    t = sol.t
-    idxs = np.arange(0, t.size, step, dtype=int)
-    nt_eff = idxs.size
-    JRSRJ = np.zeros((nt_eff, 10, 10), dtype=complex)
-
-    for k_eff, k in enumerate(idxs):
-        x8 = sol.y[0:8, k]
-        C8 = C_from_x_fast(x8)
-        final_C, _, _ = symplect.transform_complex_S(C8)
-        JRSRJ[k_eff] = symplect.expand_to_10x10_sym(1j * final_C)
-    return {"t": t[idxs], "JRSRJ": JRSRJ}
-
-def print_JRSRJ_first_last(series):
-    t = series["t"]
-    JRSRJ = series["JRSRJ"]
-
-    print("\n===== Erste JRSRJ (t = {:.6f}) =====".format(t[0]))
-    sp.pprint(sp.Matrix(JRSRJ[0]))
-
-    print("\n===== Letzte JRSRJ (t = {:.6f}) =====".format(t[-1]))
-    sp.pprint(sp.Matrix(JRSRJ[-1]))
-
-# 4) Main fast routine: compute S,J,R timeseries (optionally sampled)
-def compute_SJR_fast(sol, step=1, compute_JR=True):
-    t = sol.t
-    idxs = np.arange(0, t.size, step, dtype=int)
-    nt_eff = idxs.size
-
-    S10 = np.zeros((nt_eff, 10, 10), dtype=complex)
-    J   = np.zeros_like(S10)
-    R   = np.zeros_like(S10)
-    JRSRJ = np.zeros_like(S10)
-
-    for k_eff, k in enumerate(idxs):
-        x8 = sol.y[0:8, k]         # m1..m8
-        C8 = C_from_x_fast(x8)     # 8x8 purely imaginary
-        S10[k_eff] = S10_from_C8(C8)
-
-        if compute_JR:
-            # Your routine expects purely imaginary input of size 8x8
-            # -> transform on the 8x8 C8
-            final_C, J_small, R_small = symplect.transform_complex_S(C8)
-            # expand to 10x10 (pad identity on last two dims)
-            J[k_eff]     = symplect.expand_to_10x10(J_small)
-            R[k_eff]     = symplect.expand_to_10x10(R_small)
-            JRSRJ[k_eff] = symplect.expand_to_10x10_sym(1j * final_C)
-        else:
-            J[k_eff]     = np.eye(10, dtype=complex)
-            R[k_eff]     = np.eye(10, dtype=complex)
-            JRSRJ[k_eff] = np.nan
-
-    return {"t": t[idxs], "idxs": idxs, "S10": S10, "J": J, "R": R, "JRSRJ": JRSRJ}
-
-# 5) Print first & last (compact numeric printing, much faster than SymPy pprint)
-def print_S_first_last(series):
-    np.set_printoptions(precision=4, suppress=True)
-    t = series["t"]
-    S10 = series["S10"]
-
-    print("\n===== Erste S(10x10) (numerisch)  t = {:.6f} =====".format(t[0]))
-    print(S10[0])
-
-    print("\n===== Letzte S(10x10) (numerisch) t = {:.6f} =====".format(t[-1]))
-    print(S10[-1])
-
-    # Optional: also J and R
-    print("\n-- Erste J --"); print(series["J"][0])
-    print("\n-- Erste R --"); print(series["R"][0])
-
-# =====================================================================
-# === (A) Your singles dynamics as given (kept verbatim / adapter) ====
-# =====================================================================
-
-# -- Your functions must be defined/imported here ----------------------
-# rhs_gellmann_qp_from_ket(t, y11, params) -> 11 complex derivs
-# convert_state(y) : 11<->10 projection between [a,ad,rho..] and [Q,P,x1..x8]
-# rhs_gellmann_qp_from_x(t, x10, params) -> [dQ,dP,dx1..dx8]
-
-# (Paste your definitions here, omitted for brevity in this snippet)
-# ---------------------------------------------------------------------
-def expand_to_10x10_sympy_with_QP(C8_sym: sp.Matrix) -> sp.Matrix:
-    """Embed an 8x8 SymPy matrix into 10x10 and add canonical QP block [[0,1],[-1,0]]."""
-    if not isinstance(C8_sym, sp.MatrixBase) or C8_sym.shape != (8, 8):
-        raise ValueError("Erwarte eine 8x8 SymPy-Matrix.")
-    zero_8x2 = sp.zeros(8, 2)
-    zero_2x8 = sp.zeros(2, 8)
-    # QP block
-    QP = sp.Matrix([[0, 1],
-                    [-1, 0]])
-    top    = C8_sym.row_join(zero_8x2)
-    bottom = zero_2x8.row_join(QP)
-    return top.col_join(bottom)  # 10x10 SymPy
-
-def compute_symplectic_series_sympy(sol):
-    """
-    Aus solve_ivp-Lösung 'sol' (y: [m1..m8, m9(Q), m10(P), …]) berechne:
-      - S8_sym_list[k]  = get_S_matrix_gellman(x1..x8)  (8x8, SymPy)
-      - S10_sym_list[k] = expand_to_10x10_sympy_with_QP(S8_sym_list[k])  (10x10, SymPy)
-    Gibt (S8_sym_list, S10_sym_list) zurück.
-    """
-    nt = sol.y.shape[1]
-    S8_sym_list  = []
-    S10_sym_list = []
-
+    nt = singles_series.shape[0]
+    out = np.zeros((nt, 10, 10), dtype=float)
     for k in range(nt):
-        # Singles in m-Ordnung: m1..m8 = x1..x8
-        x1_to_x8 = sol.y[0:8, k]
-        # Falls komplex: meist sind Re(x) für die SU(3)-Kommutatoren physikalisch gemeint.
-        # Du kannst bei Bedarf .real durch die volle Zahl ersetzen.
-        x_vals = [sp.N(complex(val)) for val in x1_to_x8]
-
-        # 1) 8x8 SymPy-Matrix C(x) = get_S_matrix_gellman(x)
-        C8_sym = symplect.get_S_matrix_gellman(x_vals)  # bereits SymPy-Matrix
-        # 2) auf 10x10 mit QP-Block einbetten
-        S10_sym = expand_to_10x10_sympy_with_QP(C8_sym)
-
-        S8_sym_list.append(C8_sym)
-        S10_sym_list.append(S10_sym)
-
-    return S8_sym_list, S10_sym_list
-def _pair_index_map(pairs_order):
-    """Build a dict: (i,j) -> local pair index k (0-based within the pairs block)."""
-    return { (i, j): k for k, (i, j, _) in enumerate(pairs_order) }
-
-def plot_diagonal_fluctuations(idx, sol, names=None):
-    """
-    Plot all diagonal pair entries m_i m_i over time (i=1..n).
-    - idx: result of prepare_system_for_solve_ivp(...)
-    - sol: solve_ivp solution object
-    - names: optional list of pretty labels for m_i (length n). If None -> 'm1'..'mN'
-    """
-    t_vals = sol.t
-    pairs_order = idx["pairs_order"]
-    pair_start  = idx["pairs_slice"].start
-    n_singles   = idx["singles_slice"].stop - idx["singles_slice"].start
-    n           = n_singles  # number of m_i
-
-    if names is None:
-        names = [f"m{i+1}" for i in range(n)]
-
-    pij2k = _pair_index_map(pairs_order)
-
-    # Gather trajectories for each diagonal (i,i)
-    plt.figure(figsize=(8, 5))
-    for i in range(n):
-        # Upper-triangle contains (i,i) by construction
-        k_local = pij2k[(i, i)]                 # local index within pairs block
-        row = pair_start + k_local              # global row index in sol.y
-        traj = sol.y[row, :]                    # trajectory of m_i m_i
-
-        # Plot real part; if imag exists, also plot it dashed
-        label_base = f"{names[i]}{names[i]}"
-        plt.plot(t_vals, np.real(traj), label=f"Re[{label_base}]")
-        if np.any(np.abs(np.imag(traj)) > 0):
-            plt.plot(t_vals, np.imag(traj), "--", label=f"Im[{label_base}]")
-
-    plt.xlabel("Zeit")
-    plt.ylabel("Fluktuation (m_i m_i)")
-    plt.title("Diagonale Kovarianzen (Varianzen) m_im_i")
-    plt.legend(ncol=2, fontsize=8)
-    plt.tight_layout()
-    plt.show()
+        out[k] = symplectic_from_singles(singles_series[k], scale_su3=scale_su3)
+    # guard against roundoff
+    out = 0.5 * (out - np.transpose(out, (0, 2, 1)))
+    return out
 
 
-def singles_rhs_from_m_order(t, m_singles, params):
-    """
-    Adapter from our m-order [x1..x8, Q, P] to your rhs_gellmann_qp_from_x (which expects [Q,P,x1..x8]).
-    Returns derivatives in m-order: [dx1..dx8, dQ, dP].
-    """
-    # unpack m-singles: m1..m8 = x1..x8, m9=Q, m10=P
-    x1_to_x8 = m_singles[0:8]
-    Q = m_singles[8]
-    P = m_singles[9]
-
-    # Build x-vector in your expected order: [Q, P, x1..x8]
-    x_vec = np.array([Q, P, *x1_to_x8], dtype=complex)
-
-    # Compute [dQ, dP, dx1..dx8]
-    dQ_dP_dx = rhs_gellmann_qp_from_x(t, x_vec, params)
-
-    # Map back to m-order: [dx1..dx8, dQ, dP]
-    dQ = dQ_dP_dx[0]
-    dP = dQ_dP_dx[1]
-    dx = dQ_dP_dx[2:10]  # dx1..dx8
-
-    return np.array([*dx, dQ, dP], dtype=complex)
-
-
-# =====================================================================
-# === (B) Covariance (pairs) pipeline from Sigma_dt  ===================
-# =====================================================================
+# ============================================================
+# === Pairs system: symbolic assembly and lambdify (forgiving)
+# ============================================================
 
 def build_pair_symbol_matrix(n: int):
     """Create symbol matrix M with entries m{i}m{j}."""
@@ -390,101 +154,16 @@ def pack_state_symbols(mP_syms, M: sp.Matrix, symmetric_pairs: bool = True):
         y_syms.append(sym_ij)
     return y_syms, pairs
 
-def build_rhs_lambdify(rhs_pairs_list, y_syms, extra_params=()):
-    """Lambdify pair-derivatives as NumPy callable."""
-    z = sp.symbols(f'z0:{len(y_syms)}')
-    subs_map = {sym: z[k] for k, sym in enumerate(y_syms)}
-    rhs_z = [sp.simplify(expr.xreplace(subs_map)) for expr in rhs_pairs_list]
-    args = list(z) + list(extra_params)
-    f = sp.lambdify(args, rhs_z, modules='numpy')
-    return f
-
 def enforce_upper_triangle(M):
     """Replace lower m{j}m{i} by upper m{i}m{j} so Sigma_dt uses a unique naming."""
     n = M.shape[0]
     sub_map = {}
     for i in range(n):
-        for j in range(i+1, n):
+        for j in range(i + 1, n):
             upper = M[i, j]
             lower = sp.symbols(f"m{j+1}m{i+1}")
             sub_map[lower] = upper
     return sub_map
-
-def prepare_system_for_solve_ivp(mP_syms, Sigma_dt, symmetric_pairs=True, extra_params=()):
-    """
-    Returns:
-      idx: dict with slices and ordering
-      rhs_pairs_func(*z, *params) -> d/dt of pairs in our pair-order
-    """
-    n = len(mP_syms)
-    assert Sigma_dt.shape == (n, n), "Sigma_dt must be n x n with n=len(mP_syms)"
-
-    M = build_pair_symbol_matrix(n)
-    Sigma_dt = Sigma_dt.xreplace(enforce_upper_triangle(M))
-
-    pair_eqs, rhs_pairs_list, pairs_order = build_pair_equations(Sigma_dt, M, symmetric_pairs=symmetric_pairs)
-    state_symbols, pairs_order = pack_state_symbols(mP_syms, M, symmetric_pairs=symmetric_pairs)
-    rhs_pairs_func = build_rhs_lambdify_forgiving(
-    rhs_pairs_list, state_symbols, pairs_order, extra_params=extra_params
-)
-
-    singles_len = len(mP_syms)
-    pairs_len = len(state_symbols) - singles_len
-
-    idx = {
-        "singles_slice": slice(0, singles_len),
-        "pairs_slice": slice(singles_len, singles_len + pairs_len),
-        "pairs_order": pairs_order,
-        "state_symbols": state_symbols
-    }
-    return idx, rhs_pairs_func
-
-# =====================================================================
-# === (C) Build combined RHS for solve_ivp =============================
-# =====================================================================
-
-def normalize_sigma_symbols_in(expr, M):
-    """
-    Replace ANY symbol of the form m{i}m{j} and m{j}m{i} in 'expr'
-    by the UNIQUE symbol M[i-1,j-1] (upper-triangle representative).
-    """
-    sub = {}
-    for i in range(n):
-        for j in range(n):
-            s_ij = sp.symbols(f"m{i+1}m{j+1}")
-            s_ji = sp.symbols(f"m{j+1}m{i+1}")
-            rep = M[min(i,j), max(i,j)]  # always use upper-triangle representative
-            sub[s_ij] = rep
-            sub[s_ji] = rep
-    return expr.xreplace(sub)
-
-def make_combined_rhs(idx, rhs_pairs_func, params_dict, extra_param_values_tuple=()):
-    """
-    Returns fun(t,y) -> concatenated derivatives for singles+pairs.
-    - Singles part uses your rhs via 'singles_rhs_from_m_order'.
-    - Pairs part uses lambdified Sigma_dt (expects all state entries separately).
-    """
-    s_slice = idx["singles_slice"]
-    p_slice = idx["pairs_slice"]
-
-    def fun(t, y):
-        # Ensure complex dtype for singles consistency
-        y = y.astype(complex, copy=False)
-
-        # (1) Singles dynamics in m-order
-        y_singles = y[s_slice]
-        dy_singles = singles_rhs_from_m_order(t, y_singles, params_dict)  # complex (10,)
-
-        # (2) Pair dynamics via lambdify (works with real or complex; cast to complex)
-        args = tuple(y.tolist()) + tuple(extra_param_values_tuple)
-        dy_pairs = np.asarray(rhs_pairs_func(*args))
-        # enforce complex to match solve_ivp dtype for the whole state
-        dy_pairs = dy_pairs.astype(complex, copy=False)
-
-        return np.concatenate([dy_singles, dy_pairs])
-
-    return fun
-
 
 def build_rhs_lambdify_forgiving(rhs_pairs_list, y_syms, pairs_order, extra_params=()):
     """
@@ -531,9 +210,69 @@ def build_rhs_lambdify_forgiving(rhs_pairs_list, y_syms, pairs_order, extra_para
 
     # Build callable: (z0.., *extra_params) -> RHS
     args = list(z) + list(extra_params)
-    return sp.lambdify(args, rhs_z, modules='numpy')
+    return sp.lambdify(args, rhs_z, modules="numpy")
+
+def prepare_system_for_solve_ivp(mP_syms, Sigma_dt, symmetric_pairs=True, extra_params=()):
+    """
+    Returns:
+      idx: dict with slices and ordering
+      rhs_pairs_func(*z, *params) -> d/dt of pairs in our pair-order
+    """
+    n = len(mP_syms)
+    assert Sigma_dt.shape == (n, n), "Sigma_dt must be n x n with n=len(mP_syms)"
+
+    M = build_pair_symbol_matrix(n)
+    Sigma_dt = Sigma_dt.xreplace(enforce_upper_triangle(M))
+
+    pair_eqs, rhs_pairs_list, pairs_order = build_pair_equations(Sigma_dt, M, symmetric_pairs=symmetric_pairs)
+    state_symbols, pairs_order = pack_state_symbols(mP_syms, M, symmetric_pairs=symmetric_pairs)
+    rhs_pairs_func = build_rhs_lambdify_forgiving(
+        rhs_pairs_list, state_symbols, pairs_order, extra_params=extra_params
+    )
+
+    singles_len = len(mP_syms)
+    pairs_len = len(state_symbols) - singles_len
+
+    idx = {
+        "singles_slice": slice(0, singles_len),
+        "pairs_slice": slice(singles_len, singles_len + pairs_len),
+        "pairs_order": pairs_order,
+        "state_symbols": state_symbols
+    }
+    return idx, rhs_pairs_func
 
 
+# ============================================================
+# === Singles RHS adapter (m-order <-> your expected order)
+# ============================================================
+
+def singles_rhs_from_m_order(t, m_singles, params):
+    """
+    Adapter from our m-order [x1..x8, Q, P] to your rhs_gellmann_qp_from_x (which expects [Q,P,x1..x8]).
+    Returns derivatives in m-order: [dx1..dx8, dQ, dP].
+    """
+    # unpack m-singles: m1..m8 = x1..x8, m9=Q, m10=P
+    x1_to_x8 = m_singles[0:8]
+    Q = m_singles[8]
+    P = m_singles[9]
+
+    # Build x-vector in your expected order: [Q, P, x1..x8]
+    x_vec = np.array([Q, P, *x1_to_x8], dtype=complex)
+
+    # Compute [dQ, dP, dx1..dx8]
+    dQ_dP_dx = rhs_gellmann_qp_from_x(t, x_vec, params)
+
+    # Map back to m-order: [dx1..dx8, dQ, dP]
+    dQ = dQ_dP_dx[0]
+    dP = dQ_dP_dx[1]
+    dx = dQ_dP_dx[2:10]  # dx1..dx8
+
+    return np.array([*dx, dQ, dP], dtype=complex)
+
+
+# ============================================================
+# === Covariance reconstruction & transforms
+# ============================================================
 
 def initial_covariance_from_state(m0_singles, atom_scale=1.0, boson_scale=1.0):
     """
@@ -543,13 +282,12 @@ def initial_covariance_from_state(m0_singles, atom_scale=1.0, boson_scale=1.0):
       - No cross-correlations at t=0.
     Returns Σ as a (10x10) np.ndarray (complex dtype).
     """
-    Σ = np.zeros((10,10), dtype=complex)
+    Σ = np.zeros((10, 10), dtype=complex)
 
     # Atomic variances (x1..x8)
     var_x = np.zeros(8, dtype=float)
-    var_x[[0,1,3,4]] = 1.0  # x1,x2,x4,x5
+    var_x[[0, 1, 3, 4]] = 1.0  # x1,x2,x4,x5
     var_x *= atom_scale
-
     for i in range(8):
         Σ[i, i] = var_x[i]
 
@@ -558,8 +296,8 @@ def initial_covariance_from_state(m0_singles, atom_scale=1.0, boson_scale=1.0):
     Σ[9, 9] = 0.5 * boson_scale   # Var(P)
     Σ[8, 9] = 0.0                 # Cov(Q,P) = 0
     Σ[9, 8] = 0.0
-
     return Σ
+
 
 def pack_upper_triangle_from_covariance(Σ, pairs_order):
     """
@@ -570,85 +308,7 @@ def pack_upper_triangle_from_covariance(Σ, pairs_order):
     for (i, j, _sym) in pairs_order:
         m0_pairs.append(Σ[i, j])
     return np.asarray(m0_pairs, dtype=complex)
-import numpy as np
-import sympy as sp
-from typing import Dict, Tuple
 
-def su3_structure_constants() -> Dict[Tuple[int,int,int], float]:
-    """Return non-zero SU(3) structure constants f_{abc} with a,b,c in {1..8}.
-    Convention: [λ_a, λ_b] = 2i ∑_c f_{abc} λ_c  (Gell-Mann basis).
-    Only independent positive entries are listed; full antisymmetry is applied in code.
-    """
-    f = {}
-    # Standard SU(3) non-zero f_abc > 0:
-    base = {
-        (1,2,3): 1.0,
-        (1,4,7): 0.5, (1,5,6): 0.5,
-        (2,4,6): 0.5, (2,5,7): 0.5,
-        (3,4,5): 0.5, (3,6,7): 0.5,
-        (4,5,8): np.sqrt(3)/2.0,
-        (6,7,8): np.sqrt(3)/2.0,
-    }
-    # Fill with antisymmetry f_{abc} = +val and antisymmetric in a<->b, cyclic with sign:
-    def set_f(a,b,c,val):
-        f[(a,b,c)] = val
-        f[(b,a,c)] = -val
-    for (a,b,c), val in base.items():
-        set_f(a,b,c,val)
-        # also fill permutations that follow from Jacobi/antisym? Not needed:
-        # we only ever use f_{a b c} with (a,b) explicit and sum over c.
-    return f
-
-def omega_from_state(x1_to_x8: np.ndarray) -> np.ndarray:
-    """Build 10x10 Omega for a single time point given x1..x8 (expectation values).
-       Ordering: [x1..x8, Q, P].
-    """
-    f = su3_structure_constants()
-    Omega = np.zeros((10,10), dtype=float)
-
-    # SU(3) block 0..7
-    for a in range(1,9):          # 1..8
-        for b in range(1,9):
-            s = 0.0
-            for c in range(1,9):
-                s += f.get((a,b,c), 0.0) * x1_to_x8[c-1].real  # <x_c> assumed real; adjust if needed
-            Omega[a-1, b-1] = 2.0 * s
-
-    # Q,P block
-    Omega[8,9] = 1.0
-    Omega[9,8] = -1.0
-
-    # Cross blocks are zero
-    return Omega
-
-def omega_timeseries_from_solution(sol) -> np.ndarray:
-    """Compute Omega(t_k) for all time points in solve_ivp solution 'sol'.
-       'sol.y' assumed packed as [m1..m8, m9(Q), m10(P), pairs...].
-       Returns array of shape (nt, 10, 10).
-    """
-    nt = sol.y.shape[1]
-    Omegas = np.zeros((nt, 10, 10), dtype=float)
-    for k in range(nt):
-        x1_to_x8 = sol.y[0:8, k]  # m1..m8 = x1..x8
-        Omegas[k] = omega_from_state(x1_to_x8)
-    return Omegas
-
-def check_omega_properties(Omega: np.ndarray) -> Dict[str, float]:
-    """Simple diagnostics for a single Omega: antisymmetry error, rank."""
-    antisymm_err = np.linalg.norm(Omega + Omega.T)
-    rank = np.linalg.matrix_rank(Omega)
-    return {"antisymmetry_norm": float(antisymm_err), "rank": float(rank)}
-# ============================================================
-# Transform Σ(t) -> Σ̃(t) = J^T R^T Σ R J  and plot heatmaps
-# Requires:
-#   - 'sol' from solve_ivp with state packing [m1..m8, m9(Q), m10(P), pairs...]
-#   - 'idx' from prepare_system_for_solve_ivp (has pairs_order, slices)
-#   - 'SJR' from compute_SJR_fast(sol, step=1, compute_JR=True)
-#       with keys: "t", "idxs", "J", "R"
-# ============================================================
-
-import numpy as np
-import matplotlib.pyplot as plt
 
 def reconstruct_sigma_series(sol, idx, take_real=True):
     """Reconstruct Σ(t_k) (10x10) from the packed pair entries in sol.y using idx['pairs_order']."""
@@ -669,355 +329,855 @@ def reconstruct_sigma_series(sol, idx, take_real=True):
         Sigmas = np.real(Sigmas)
     return Sigmas
 
-def transform_sigma_series(Sigmas, SJR):
-    """Apply Σ̃ = J^T R^T Σ R J for all sampled times in SJR (uses SJR['idxs'] mapping)."""
-    idxs = SJR["idxs"]                # indices into full time grid used for JR computation
-    J = SJR["J"]                      # shape (nt_eff, 10, 10)
-    R = SJR["R"]
-    nt_eff = idxs.size
-    n = Sigmas.shape[1]
-    Sigma_tilde = np.zeros((nt_eff, n, n), dtype=Sigmas.dtype)
-    for k_eff, k in enumerate(idxs):
-        Σ = Sigmas[k]                 # (10,10)
-        Jk = J[k_eff]
-        Rk = R[k_eff]
-        # Σ̃ = J^T R^T Σ R J
-        Sigma_tilde[k_eff] = Jk.T @ Rk.T @ Σ @ Rk @ Jk
-        # enforce symmetry numerically
-        Sigma_tilde[k_eff] = 0.5 * (Sigma_tilde[k_eff] + Sigma_tilde[k_eff].T)
-    return Sigma_tilde
 
-def plot_sigma_tilde_heatmaps(Sigma_tilde, t_eff, which=("first","last")):
-    """Plot heatmaps of Σ̃ at selected times (first/last)."""
-    choices = []
-    if "first" in which: choices.append((0, "Erste"))
-    if "last"  in which: choices.append((-1, "Letzte"))
+# ============================================================
+# === R, J from real s; transform Σ with them
+# ============================================================
 
-    for idx, label in choices:
-        idx_eff = idx if idx >= 0 else Sigma_tilde.shape[0] + idx
-        Σt = Sigma_tilde[idx_eff]
-        plt.figure(figsize=(5.0, 4.5))
-        plt.imshow(Σt, origin="lower", interpolation="nearest")
-        plt.colorbar(label="Σ̃-Eintragswert")
-        plt.title(f"{label} Σ̃ (t = {t_eff[idx_eff]:.6f})")
-        plt.xlabel("Index j")
-        plt.ylabel("Index i")
-        plt.tight_layout()
+def compute_RJ_series(sol, idx, *, step: int = 1):
+    """
+    Compute (R_k, J_k) for sampled time indices using the 8x8 SU(3) block of the real symplectic s(t).
+    Pipeline:
+        s(t)    : real, skew-symmetric 10x10 from symplectic_series_from_solution
+        C8(t)   : = s(t)[:8,:8]
+        (C8_can, J8, R8) = transform_complex_S(1j*C8)   # canonicalization in complex form
+        J10, R10: expand to 10x10 by padding identity on the last 2x2 (Q,P)
+        s_tilde : J10^T R10^T s R10 J10    (real)
+    Returns:
+        dict with keys: "t", "idxs", "s", "J", "R", "s_tilde"
+    """
+    # 1) real s(t) series, shape (nt,10,10)
+    S_all = symplectic_series_from_solution(sol, idx)  # real & skew
+    t = sol.t
+    nt = len(t)
+    idxs = np.arange(0, nt, step, dtype=int)
+
+    # preallocate
+    J_ser  = np.zeros((len(idxs), 10, 10), dtype=float)
+    R_ser  = np.zeros((len(idxs), 10, 10), dtype=float)
+    s_tser = np.zeros((len(idxs), 10, 10), dtype=float)
+
+    for kk, k in enumerate(idxs):
+        s_k = S_all[k]
+        C8  = s_k[:8, :8]                     # real skew (SU(3) block)
+        # Canonicalize on 1j*C8 (routine expects purely imaginary input):
+        C8_can, J8, R8 = symplect.transform_complex_S(1j * C8)
+        # Expand to 10x10 by padding identity on Q,P
+        J10 = symplect.expand_to_10x10(J8)
+        R10 = symplect.expand_to_10x10(R8)
+        # Store real versions
+        J_ser[kk] = np.real_if_close(J10).astype(float)
+        R_ser[kk] = np.real_if_close(R10).astype(float)
+        # Build s_tilde = J^T R^T s R J  (remains real)
+        s_t = J_ser[kk].T @ R_ser[kk].T @ s_k @ R_ser[kk] @ J_ser[kk]
+        # enforce skew-symmetry numerically
+        s_t = 0.5 * (s_t - s_t.T)
+        s_tser[kk] = s_t
+
+    return {"t": t[idxs], "idxs": idxs, "s": S_all, "J": J_ser, "R": R_ser, "s_tilde": s_tser}
+
+
+def transform_sigma_with_RJ(Sigmas: np.ndarray, RJ_series: dict) -> np.ndarray:
+    """
+    Transform the covariance series with R,J from compute_RJ_series:
+        Σ̃_k = J_k^T R_k^T Σ(t_k) R_k J_k
+    Sigmas shape: (nt, 10, 10)   (full time grid)
+    RJ_series["idxs"] selects the sampled times where R,J exist.
+    Returns:
+        Sigma_tilde (nsamp, 10, 10) aligned with RJ_series["t"].
+    """
+    idxs = RJ_series["idxs"]
+    Jser = RJ_series["J"]
+    Rser = RJ_series["R"]
+
+    nsamp = len(idxs)
+    out = np.zeros((nsamp, 10, 10), dtype=float)
+    for kk, k in enumerate(idxs):
+        Sg = 0.5 * (Sigmas[k] + Sigmas[k].T)          # guard symmetry
+        T  = Rser[kk] @ Jser[kk]
+        out[kk] = (T.T @ Sg @ T)
+        out[kk] = 0.5 * (out[kk] + out[kk].T)         # enforce symmetry
+    return out
+
+
+def populations_from_x(x_series: np.ndarray):
+    """
+    Compute populations (rho00, rho11, rho22) from x1..x8 time series.
+    x_series: array shape (nt, 8) with columns [x1..x8]
+    Returns: rho00, rho11, rho22 each shape (nt,)
+    """
+    # Take real part to avoid tiny imaginary round-off
+    x = np.real(np.asarray(x_series))
+    x3 = x[:, 2]   # x3 corresponds to <lambda_3>
+    x8 = x[:, 7]   # x8 corresponds to <lambda_8>
+
+    # Standard qutrit formulas (see note above)
+    rho00 = 1.0/3.0 + 0.5*( x3 + x8/np.sqrt(3.0) )
+    rho11 = 1.0/3.0 + 0.5*( -x3 + x8/np.sqrt(3.0) )
+    rho22 = 1.0/3.0 + 0.5*( -2.0*x8/np.sqrt(3.0) )
+    return rho00, rho11, rho22
+
+
+def plot_populations_from_sol(sol, idx, title_suffix: str = ""):
+    """
+    Extract x1..x8 from sol/idx (m-order singles = [x1..x8,Q,P]) and plot populations over time.
+    """
+    sl = idx["singles_slice"]
+    Y = np.asarray(sol.y).T                                 # (nt, nstate)
+    singles = Y[:, sl]                                      # (nt, 10)
+    x_series = singles[:, :8]                               # (nt, 8)
+
+    rho00, rho11, rho22 = populations_from_x(x_series)
+
+    plt.figure(figsize=(7.5, 4.5))
+    plt.plot(sol.t, rho00, label=r"$\rho_{00}$")
+    plt.plot(sol.t, rho11, label=r"$\rho_{11}$")
+    plt.plot(sol.t, rho22, label=r"$\rho_{22}$")
+    plt.xlabel("t")
+    plt.ylabel("Population")
+    plt.title("Populationen ρ₀₀, ρ₁₁, ρ₂₂ " + title_suffix)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
     plt.show()
-def check_psd_series(Sigmas: np.ndarray, t: np.ndarray, name: str = "Σ", tol: float = 1e-12, do_plot: bool = True):
+    print("Populationen geplottet.")
+    return rho00, rho11, rho22
+
+
+
+
+
+# ---------- Convenience wrapper to do both ----------
+def plot_populations_and_sigma(sol, idx, only_upper_sigma: bool = False):
     """
-    Check positive semidefiniteness for a time series of covariance matrices.
-    Uses eigvalsh of the symmetrized real part: S = (Σ + Σ^T)/2, then eigs = eigvalsh(Re(S)).
-    Prints summary and (optionally) plots min eigenvalue vs time.
+    Convenience wrapper: plot populations and then the full Σ time-series grid.
     """
-    nt = Sigmas.shape[0]
-    min_eigs = np.empty(nt, dtype=float)
-    bad = []
-    for k in range(nt):
-        S = 0.5 * (Sigmas[k] + Sigmas[k].T)
-        S = np.real(S)  # covariance should be real-symmetric in our pipeline
-        vals = np.linalg.eigvalsh(S)
-        m = float(vals.min())
-        min_eigs[k] = m
-        if m < -tol:
-            bad.append(k)
-
-    print(f"[PSD-Check] {name}: min(λ_min)={min_eigs.min():.3e}, max(λ_min)={min_eigs.max():.3e}, "
-          f"Anzahl Verletzungen (λ_min < -{tol:g}): {len(bad)} / {nt}")
-    if len(bad) > 0:
-        first_bad = bad[0]
-        print(f"  ↳ Erste Verletzung bei t={t[first_bad]:.6g} (λ_min={min_eigs[first_bad]:.3e})")
-
-    # if do_plot:
-    #     plt.figure(figsize=(6.4, 3.6))
-    #     plt.plot(t, min_eigs, label="λ_min(Σ)")
-    #     plt.axhline(0.0, linestyle="--", color="gray", linewidth=1)
-    #     plt.xlabel("Zeit"); plt.ylabel("kleinster Eigenwert")
-    #     plt.title(f"PSD-Check: kleinster Eigenwert von {name}(t)")
-    #     plt.legend(); plt.tight_layout(); plt.show()
-
-    return min_eigs, bad
+    _ = plot_populations_from_sol(sol, idx)
 
 
-# ---------- BACK-TRANSFORM (Gell-Mann -> 'rho'-nahe Ebene) ----------
-def A_m_to_rho() -> np.ndarray:
-    """
-    Linear map A (10x10) that converts m = [x1..x8,Q,P] to
-    y = [Re ρ01, Im ρ01, Re ρ02, Im ρ02, Re ρ12, Im ρ12, ρ00, ρ11, Q, P].
-    Note: ρ22 = 1 - ρ00 - ρ11 (affin), which does not enter the covariance (constants drop out).
-    Covariance transforms as Σ_y = A Σ_m A^T.
-    """
-    A = np.zeros((10, 10), dtype=float)
-    # x1..x8 at cols 0..7; Q,P at cols 8,9
-    # coherences
-    A[0, 0] = 0.5  # Re ρ01 = x1/2
-    A[1, 1] = 0.5  # Im ρ01 = x2/2
-    A[2, 3] = 0.5  # Re ρ02 = x4/2
-    A[3, 4] = 0.5  # Im ρ02 = x5/2
-    A[4, 5] = 0.5  # Re ρ12 = x6/2
-    A[5, 6] = 0.5  # Im ρ12 = x7/2
-    # populations (linear part only; constant offsets vanish in covariances)
-    # ρ00 = 1/3 + (√3/6) x8 + (1/2) x3
-    # ρ11 = 1/3 + (√3/6) x8 - (1/2) x3
-    A[6, 2] = 0.5           # x3
-    A[6, 7] = np.sqrt(3)/6  # x8
-    A[7, 2] = -0.5          # x3
-    A[7, 7] = np.sqrt(3)/6  # x8
-    # field quadratures
-    A[8, 8] = 1.0           # Q
-    A[9, 9] = 1.0           # P
-    return A
-# ---------- Forensic diagnostics on A/D assembly ----------
-def sym_min_eig(M):
-    """Smallest eigenvalue of the symmetric real part of M."""
-    M = np.array(sp.Matrix(M), dtype=float) if isinstance(M, sp.MatrixBase) else np.array(M, dtype=float)
-    Ms = 0.5*(M+M.T)
-    return float(np.linalg.eigvalsh(Ms).min())
-
-def print_block_psd_report(G, sDs, Z, sE, W):
-    print("\n=== PSD-Report der Bausteine ===")
-    print("min λ( sym(sDs) ) =", f"{sym_min_eig(sDs): .3e}")
-    print("min λ( sym(Z)   ) =", f"{sym_min_eig(Z): .3e}")
-    print("min λ( sym(sE)  ) =", f"{sym_min_eig(sE): .3e}")
-    print("min λ( sym(W)   ) =", f"{sym_min_eig(W): .3e}", "  <-- aktuelles D, sollte ≥ 0 sein")
-    # Spot: sE wirkt bei dir wie Dämpfung auf Q,P → gehört in A, nicht in D
-    if sym_min_eig(W) < 0:
-        print("Hinweis: W ist nicht PSD. Prüfe, ob sE in D gelandet ist (falsch).")
-
-def split_D_correctly(sDs, Z):
-    """Construct a 'physically sane' diffusion: D = sym(sDs + Z)."""
-    Zs = 0.5*(Z + Z.T)
-    return sDs + Zs
-
-def reassemble_dynamics(G, sDs, Z, sE):
-    """
-    Recommended assembly:
-      A_eff = G + A_extra    (antisymmetric bits, damping etc.)
-      D_eff = sym(sDs + Z)   (must be PSD)
-    Here we move sE into A (friction) and use only sym(Z) in D.
-    """
-    A_eff = G + sE          # sE = -κ/2 on Q,P → drift (Friction)
-    D_eff = split_D_correctly(sDs, Z)  # PSD candidate
-    return A_eff, D_eff
-
-def sigma_rho_series_from_sigma(Sigmas_m: np.ndarray) -> np.ndarray:
-    """
-    Build Σ_rho(t) = A Σ_m(t) A^T for all times, where m = [x1..x8,Q,P] and
-    rho basis y = [Re ρ01, Im ρ01, Re ρ02, Im ρ02, Re ρ12, Im ρ12, ρ00, ρ11, Q, P].
-    """
-    A = A_m_to_rho()
-    # vectorized: Σ_rho(t) = A Σ_m(t) A^T
-    return np.einsum("ij,tjk,lk->til", A, Sigmas_m, A)
-def psd_culprit_probe(Sigmas, A_eff, D_eff, t, k_idx):
-    """Project dΣ/dt contributions onto the eigenvector of λ_min(Σ)."""
-    Σ = Sigmas[k_idx]
-    # eigenvector of smallest eigenvalue (symmetric real part)
-    evals, evecs = np.linalg.eigh(0.5*(Σ+Σ.T))
-    v = evecs[:, np.argmin(evals)]
-    # contributions (approx; Σ assumed symmetric here)
-    drift_contrib = float(v.T @ (A_eff @ Σ + Σ @ A_eff.T) @ v)
-    diff_contrib  = float(v.T @ (0.5*(D_eff+D_eff.T)) @ v)
-    print(f"[t={t[k_idx]:.6g}] v^T (AΣ+ΣA^T) v = {drift_contrib: .3e} ;  v^T D v = {diff_contrib: .3e}")
-    return drift_contrib, diff_contrib
-def is_psd_numeric(M, tol=1e-10):
-    """Quick PSD test (numeric): all eigenvalues >= -tol."""
-    # Use symmetric part to be safe against rounding
-    w = np.linalg.eigvalsh(0.5*(M+M.T))
-    return w.min() >= -tol, w.min()
-
-def project_to_psd(M, tol=1e-12):
-    """Project symmetric matrix to nearest PSD (eigvalue clipping)."""
-    S = 0.5*(M+M.T)
-    w, V = np.linalg.eigh(S)
-    w_clipped = np.maximum(w, 0.0)
-    return (V * w_clipped) @ V.T
-
-def symmetrize(M):
-    """Force exact symmetry."""
-    return 0.5*(M+M.T)
-
-def check_hurwitz(A):
-    """Return True if all eigenvalues of A have negative real part."""
-    lam = np.linalg.eigvals(A)
-    return np.all(np.real(lam) < 0.0), lam
-
-# Example diagnostic after each integration step:
-def check_symmetry(M):
-    if M.equals(M.T):
-        return "symmetric"
-    elif M.equals(-M.T):
-        return "antisymmetric"
-    else:
-        return "neither"
-    
 
 # Python code (comments in English; console/output in German)
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --- (Fallback) If not already defined in your session, keep these helpers: ---
-def A_m_to_rho() -> np.ndarray:
-    """
-    Linear map A (10x10) that converts m = [x1..x8, Q, P] to
-    y = [Re ρ01, Im ρ01, Re ρ02, Im ρ02, Re ρ12, Im ρ12, ρ00, ρ11, Q, P].
-    Covariances transform as:  Σ_y = A Σ_m A^T
-    """
-    A = np.zeros((10, 10), dtype=float)
-    # coherences
-    A[0, 0] = 0.5  # Re ρ01 = x1/2
-    A[1, 1] = 0.5  # Im ρ01 = x2/2
-    A[2, 3] = 0.5  # Re ρ02 = x4/2
-    A[3, 4] = 0.5  # Im ρ02 = x5/2
-    A[4, 5] = 0.5  # Re ρ12 = x6/2
-    A[5, 6] = 0.5  # Im ρ12 = x7/2
-    # populations (linear part; constants drop out in covariances)
-    A[6, 2] = 0.5           # ρ00 ~ +x3/2
-    A[6, 7] = np.sqrt(3)/6  # ρ00 ~ +x8*√3/6
-    A[7, 2] = -0.5          # ρ11 ~ -x3/2
-    A[7, 7] = np.sqrt(3)/6  # ρ11 ~ +x8*√3/6
-    # field quadratures
-    A[8, 8] = 1.0           # Q
-    A[9, 9] = 1.0           # P
-    return A
+
+
+
+# ====================== 2) Σ so plotten wie s(t) ======================
 
 def reconstruct_sigma_series(sol, idx, take_real=True):
-    """Rebuild Σ(t_k) (10x10) from packed pair entries in sol.y using idx['pairs_order']."""
-    n = idx["singles_slice"].stop - idx["singles_slice"].start  # = 10
-    pair_start = idx["pairs_slice"].start
-    pairs_order = idx["pairs_order"]
-    nt = sol.y.shape[1]
-    Sigmas = np.zeros((nt, n, n), dtype=complex)
-    for k_loc, (i, j, _sym) in enumerate(pairs_order):
-        row = pair_start + k_loc
-        traj = sol.y[row, :]
-        Sigmas[:, i, j] = traj
-        Sigmas[:, j, i] = np.conjugate(traj)
-    if take_real:
-        Sigmas = np.real(Sigmas)
-    return Sigmas
+    """(Stub here if not already in scope) – you said you have this already."""
+    raise RuntimeError("Nutze deine bestehende reconstruct_sigma_series(sol, idx).")
 
-def sigma_rho_series_from_sigma(Sigmas_m: np.ndarray) -> np.ndarray:
-    """Compute Σ_rho(t) = A Σ_m(t) A^T for all times."""
-    A = A_m_to_rho()
-    return np.einsum("ij,tjk,lk->til", A, Sigmas_m, A)
-
-# --- Core function: compute and plot correlations of populations with Q and P ---
-def plot_population_QP_correlations(sol, idx, use_real=True, figsize=(7.2, 4.4)):
+def plot_sigma_entries_over_time(sol, idx, entries=((0,0),(1,1),(2,2),(8,8),(9,9)) , take_real=True):
     """
-    Compute Σ(t) in m-order [x1..x8,Q,P], transform to rho-near basis y, and
-    plot Cov(rho00, Q/P) and Cov(rho11, Q/P) vs time.
-    - use_real=True enforces real symmetric covariances before transform.
+    Plot selected Σ_ij(t) entries vs time (same style as s-plot).
+    Default entries: a few diagonals incl. Q and P.
     """
-    # 1) Reconstruct Σ_m(t) from the packed state
-    Sigmas_m = reconstruct_sigma_series(sol, idx, take_real=use_real)
+    Sigmas = reconstruct_sigma_series(sol, idx, take_real=take_real)  # (nt,10,10)
+    t = sol.t
+    plt.figure(figsize=(7.5, 4.5))
+    for (i,j) in entries:
+        y = np.real(Sigmas[:, i, j]) if take_real else Sigmas[:, i, j]
+        plt.plot(t, y, label=f"Σ[{i},{j}]")
+    plt.xlabel("t"); plt.ylabel("Σ_{ij}(t)")
+    plt.title("Ausgewählte Einträge der Kovarianzmatrix")
+    plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
+    print("Ausgewählte Σ(t)-Einträge geplottet.")
 
-    # 2) Transform to rho-near basis: y = [Reρ01, Imρ01, Reρ02, Imρ02, Reρ12, Imρ12, ρ00, ρ11, Q, P]
-    Sigma_rho = sigma_rho_series_from_sigma(Sigmas_m)
+def heatmap_sigma_snapshots(sol, idx, times=(0.0, 1.0, None), vmin=None, vmax=None, take_real=True):
+    """
+    Heatmaps of Σ(t) at selected times. times may include None -> use final time.
+    """
+    Sigmas = reconstruct_sigma_series(sol, idx, take_real=take_real)
+    t = sol.t
+    times_eff = []
+    for tau in times:
+        if tau is None:
+            times_eff.append(t[-1])
+        else:
+            times_eff.append(tau)
 
-    # 3) Extract the needed covariances (time series)
-    # Indices in y-basis:
-    i_r00, i_r11, i_Q, i_P = 6, 7, 8, 9
-    t_vals = sol.t
-    cov_r00_Q = Sigma_rho[:, i_r00, i_Q]
-    cov_r00_P = Sigma_rho[:, i_r00, i_P]
-    cov_r11_Q = Sigma_rho[:, i_r11, i_Q]
-    cov_r11_P = Sigma_rho[:, i_r11, i_P]
+    ncols = len(times_eff)
+    plt.figure(figsize=(4.5*ncols, 4.0))
+    for c, tau in enumerate(times_eff, 1):
+        k = int(np.argmin(np.abs(t - tau)))
+        plt.subplot(1, ncols, c)
+        M = np.real(Sigmas[k]) if take_real else Sigmas[k]
+        im = plt.imshow(M, origin="lower", vmin=vmin, vmax=vmax, aspect="equal")
+        plt.title(f"Σ @ t≈{t[k]:.3g}")
+        plt.colorbar(im, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    print("Heatmaps von Σ(t) erstellt.")
 
-    # 4) Plots
-    plt.figure(figsize=figsize)
-    plt.plot(t_vals, cov_r00_Q, label=r'Cov($\rho_{00}$, $Q$)')
-    plt.plot(t_vals, cov_r00_P, label=r'Cov($\rho_{00}$, $P$)', linestyle="--")
-    plt.xlabel("Zeit"); plt.ylabel("Kovarianz"); plt.title("Korrelationen: ρ00 mit Q und P")
-    plt.legend(); plt.tight_layout(); plt.show()
 
-    plt.figure(figsize=figsize)
-    plt.plot(t_vals, cov_r11_Q, label=r'Cov($\rho_{11}$, $Q$)')
-    plt.plot(t_vals, cov_r11_P, label=r'Cov($\rho_{11}$, $P$)', linestyle="--")
-    plt.xlabel("Zeit"); plt.ylabel("Kovarianz"); plt.title("Korrelationen: ρ11 mit Q und P")
-    plt.legend(); plt.tight_layout(); plt.show()
 
-    print("Fertig: Korrelationen geplottet (ρ00↔Q/P und ρ11↔Q/P).")
+# --- Diagnostics: check skew-symmetry and canonical QP block --------------------
+def report_s_properties(S_all, *, check_qp: bool = True):
+    """
+    Print basic diagnostics for s(t):
+    - maximal skew-symmetry deviation
+    - minimal singular value (rank check hint)
+    - optional check of the (Q,P) block signs
+    """
+    nt = S_all.shape[0]
 
-    # 5) Return arrays for further processing if needed
+    # Skew-symmetry deviation over all times
+    devs = np.linalg.norm(S_all + np.transpose(S_all, (0,2,1)), ord=np.inf, axis=(1,2))
+    print(f"Skewsymmetric-Abweichung max über alle Zeiten: {np.max(devs):.3e}")
+
+    # Singular values at a few sample times (rank hints)
+    sample_ids = np.linspace(0, nt-1, num=min(5, nt), dtype=int)
+    mins = []
+    for k in sample_ids:
+        sv = np.linalg.svd(S_all[k], compute_uv=False)
+        mins.append(np.min(sv))
+    print("Minimale Singulärwerte an Stichprobenzeiten:",
+          ", ".join(f"{v:.3e}" for v in mins))
+
+    # Optional: check canonical QP block (indices 8,9 in m-order)
+    if check_qp:
+        qp = S_all[:, 8:10, 8:10]
+        qp_det = np.linalg.det(qp)
+        print(f"(Q,P)-Block: Mittelwert det(s_QP(t)) = {np.mean(qp_det):.6f}  (sollte ~1.0 sein)")
+        # Quick sign check of s_QP = [[0, +1],[-1, 0]]
+        s_qp_01 = np.mean(qp[:, 0, 1])
+        s_qp_10 = np.mean(qp[:, 1, 0])
+        print(f"(Q,P)-Block: Mittelwert s[Q,P] = {s_qp_01:.6f} (sollte +1), s[P,Q] = {s_qp_10:.6f} (sollte -1)")
+
+
+# --- Pretty print for selected time steps --------------------------------------
+def print_s_at_times(S_all, t, times_to_show=()):
+    """
+    Pretty-print s(t_k) at selected physical times.
+    times_to_show: iterable of floats; picks nearest time indices.
+    """
+    if not times_to_show:
+        return
+    for tau in times_to_show:
+        k = int(np.argmin(np.abs(t - tau)))
+        print(f"\ns(t) bei t≈{t[k]:.6g}:")
+        # print compact with aligned columns
+        with np.printoptions(precision=4, suppress=True, linewidth=140):
+            print(S_all[k])
+
+
+# --- Optional: plot a few matrix elements vs time ------------------------------
+def plot_s_entries_over_time(S_all, t, entries=((8,9),(9,8),(0,1),(1,2))):
+    """
+    Quick time-series plots of selected s_{ij}(t) entries.
+    """
+    plt.figure(figsize=(7.5, 4.5))
+    for (i,j) in entries:
+        plt.plot(t, S_all[:, i, j], label=f"s[{i},{j}]")
+    plt.xlabel("t")
+    plt.ylabel("s^{αβ}(t)")
+    plt.title("Ausgewählte Einträge der symplektischen Matrix")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    print("Ausgewählte Einträge von s(t) geplottet.")
+
+
+# --- Save to disk --------------------------------------------------------------
+def save_s_series(S_all, path_npz="s_series.npz", key="s_series"):
+    """
+    Save the full time series to disk for later analysis.
+    """
+    np.savez_compressed(path_npz, **{key: S_all})
+    print(f"s(t)-Serie gespeichert nach: {path_npz}  (Key='{key}')")
+
+
+# ============================================================
+# === Main: assemble, integrate, transform, and inspect
+# ============================================================
+# Python code (comments in English; console/output in German)
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ---------- Numerics helpers ----------
+def symmetrize_hermitian(M):
+    """Make a matrix Hermitian numerically: (M + M^†)/2."""
+    return 0.5 * (M + M.conjugate().T)
+
+def min_eigvals_hermitian_series(series):
+    """
+    Compute eigenvalues for a time series of Hermitian matrices.
+    series: array (nt, n, n)
+    Returns:
+        lam_min: shape (nt,) minimal eigenvalue at each time
+        lam_all: list of 1D arrays of eigenvalues per time (ascending)
+    """
+    nt = series.shape[0]
+    lam_min = np.empty(nt, dtype=float)
+    lam_all = []
+    for k in range(nt):
+        Hk = symmetrize_hermitian(series[k])
+        # eigvalsh is for Hermitian; returns ascending real eigenvalues
+        evals = np.linalg.eigvalsh(Hk)
+        lam_all.append(evals)
+        lam_min[k] = np.min(evals.real)
+    return lam_min, lam_all
+
+def is_psd_from_min(lam_min, tol=1e-10):
+    """Return boolean mask for PSD (min eigenvalue >= -tol)."""
+    return lam_min >= -tol
+
+# ---------- Core checks ----------
+def check_psd_sigma_and_uncertainty(sol, idx, *, tol=1e-10, take_real_sigma=True, scale_su3=2.0,
+                                    make_plots=True):
+    """
+    For all time steps, test:
+      (i)  Σ(t) PSD
+      (ii) Σ(t) + (i/2) s(t) PSD    (Robertson-Schrödinger uncertainty)
+    Uses numerically reconstructed Σ(t) and s(t).
+    """
+    # 1) Reconstruct Σ(t) in m-order [x1..x8, Q, P]
+    Sigmas = reconstruct_sigma_series(sol, idx, take_real=take_real_sigma)  # (nt,10,10)
+    # Ensure (real-)symmetric or Hermitian
+    for k in range(Sigmas.shape[0]):
+        Sigmas[k] = symmetrize_hermitian(Sigmas[k])
+
+    # 2) Compute s(t) from singles (real skew-symmetric)
+    S_all = symplectic_series_from_solution(sol, idx, scale_su3=scale_su3)  # (nt,10,10)
+    # Enforce skew-symmetry
+    S_all = 0.5 * (S_all - np.transpose(S_all, (0,2,1)))
+
+    # 3) Check Σ(t) PSD
+    lam_min_Sigma, _ = min_eigvals_hermitian_series(Sigmas)
+    psd_Sigma = is_psd_from_min(lam_min_Sigma, tol=tol)
+
+    # 4) Check Σ + i/2 s PSD (this is Hermitian because i*s is Hermitian)
+    nt = Sigmas.shape[0]
+    Sigma_plus_is_over_2 = np.empty_like(Sigmas, dtype=complex)
+    for k in range(nt):
+        Sigma_plus_is_over_2[k] = symmetrize_hermitian(Sigmas[k] + 0.5j * S_all[k])
+
+    lam_min_unc, _ = min_eigvals_hermitian_series(Sigma_plus_is_over_2)
+    psd_unc = is_psd_from_min(lam_min_unc, tol=tol)
+
+    # 5) Console report
+    print("=== PSD-Checks über alle Zeiten ===")
+    print(f"Σ + i/2 s:  min(λ_min) = {np.min(lam_min_unc):.3e},  "
+      f"verletzte Zeitpunkte = {np.count_nonzero(~psd_unc)}")
+
+    # Show first few violating indices (if any)
+    bad_sigma = np.where(~psd_Sigma)[0]
+    bad_unc   = np.where(~psd_unc)[0]
+    if bad_sigma.size > 0:
+        k = bad_sigma[:10]
+        print("Erste verletzte Indizes für Σ PSD:", k, " (Zeiten ~", sol.t[k], ")")
+    if bad_unc.size > 0:
+        k = bad_unc[:10]
+        print("Erste verletzte Indizes für Σ + i/2 s PSD:", k, " (Zeiten ~", sol.t[k], ")")
+
+    # 6) Optional plots of minimal eigenvalue vs time
+    if make_plots:
+        plt.figure(figsize=(7.5, 4.5))
+        plt.plot(sol.t, lam_min_Sigma, label="min λ(Σ)")
+        plt.plot(sol.t, lam_min_unc, label="min λ(Σ + i/2·s)")
+        plt.axhline(0.0, linestyle="--")
+        plt.xlabel("t")
+        plt.ylabel("Minimaler Eigenwert")
+        plt.title("PSD-Tests über die Zeit")
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.tight_layout()
+        print("Plots der minimalen Eigenwerte erstellt.")
+
     return {
-        "t": t_vals,
-        "cov_r00_Q": cov_r00_Q,
-        "cov_r00_P": cov_r00_P,
-        "cov_r11_Q": cov_r11_Q,
-        "cov_r11_P": cov_r11_P,
-        "Sigma_rho": Sigma_rho,   # full series in rho-basis (optional)
+        "lam_min_Sigma": lam_min_Sigma,
+        "lam_min_unc": lam_min_unc,
+        "psd_Sigma_mask": psd_Sigma,
+        "psd_unc_mask": psd_unc,
+        "S_all": S_all,
+        "Sigmas": Sigmas
     }
+import numpy as np
+
+def build_C_full(f_tensor, boson_factor=1.0):
+    """
+    Build commutator matrix C for 8 SU(3) fluctuation operators + q,p bosonic mode.
+
+    f_tensor[a,b,c] : structure constants f_{abc} (antisymmetric in a,b)
+    boson_factor    : kappa with [q,p] = i*kappa (usually 1 or 2)
+
+    Returns:
+      C : (10x10) numpy array
+    """
+    dim_spin = 8
+    J_spin = np.zeros((dim_spin, dim_spin))
+    # build spin commutator block with factor 2
+    for a in range(dim_spin):
+        for b in range(dim_spin):
+            for c in range(dim_spin):
+                J_spin[a, b] += 2 * f_tensor[a, b, c]  # factor 2 included
+
+    # bosonic commutator block
+    J_boson = np.array([[0, boson_factor], [-boson_factor, 0]])
+
+    # assemble block-diagonal C
+    C = np.block([
+        [J_spin,               np.zeros((dim_spin, 2))],
+        [np.zeros((2, dim_spin)), J_boson]
+    ])
+
+    return C
+
+def su3_f_tensor() -> np.ndarray:
+    """
+    Return f[a,b,c] for SU(3) in the standard Gell-Mann basis (a,b,c = 0..7 for λ1..λ8).
+    Only ascending triples are set positive; all others follow by total antisymmetry.
+    """
+    f = np.zeros((8, 8, 8), dtype=float)
+
+    # Positive base (ascending index triples; 1-based in literature -> 0-based here):
+    pos = [
+        (0,1,2, 1.0),                        # f_{123} = 1
+        (0,3,6, 0.5), (1,3,5, 0.5), (1,4,6, 0.5),
+        (2,3,4, 0.5), (2,5,6, 0.5), (3,4,7, np.sqrt(3)/2.0), (5,6,7, np.sqrt(3)/2.0)
+    ]
+    # The line above uses the conventional ascending positives:
+    # (1,4,7), (2,4,6), (2,5,7), (3,4,5), (1,5,6), (3,6,7), (4,5,8), (6,7,8)
+
+    # Fill ascending entries
+    for (i,j,k,val) in pos:
+        f[i,j,k] = val
+
+    # Enforce total antisymmetry over all permutations
+    # If (i,j,k) has value v for sorted(i,j,k), then any permutation gets sign = parity(perm) * v.
+    def sign_of_permutation(triple, perm):
+        # parity via number of swaps to reach perm from triple
+        a,b,c = triple
+        x,y,z = perm
+        s = 1
+        arr = [a,b,c]
+        if arr[0] != x:
+            j = arr.index(x); arr[0],arr[j] = arr[j],arr[0]; s *= -1
+        if arr[1] != y:
+            j = arr.index(y); arr[1],arr[j] = arr[j],arr[1]; s *= -1
+        # now arr[2] == z automatically
+        return s
+
+    for (i,j,k,val) in pos:
+        base = (i,j,k)
+        from itertools import permutations
+        for p in set(permutations(base, 3)):
+            sgn = sign_of_permutation(base, p)
+            f[p] = sgn * val
+
+    return f
+def _build_nameval_from_numeric_params(numeric_params: dict) -> dict[str, float]:
+    """Make a name->float map from a dict keyed by SymPy Symbols (or strings)."""
+    nameval: dict[str, float] = {}
+    for k, v in numeric_params.items():
+        if isinstance(k, sp.Symbol):
+            name = k.name
+        else:
+            name = str(k)
+        try:
+            nameval[name] = float(v)
+        except Exception:
+            nameval[name] = float(sp.N(v))
+    return nameval
+
+def numeric_matrix_from_sym(
+    M_sym: sp.Matrix,
+    subs_primary: dict[sp.Symbol, complex] | None = None,
+    numeric_params: dict | None = None,
+    default_zero: bool = True,
+) -> np.ndarray:
+    """
+    Substitute (1) explicit symbol->value map (e.g. m1..m10) and (2) numeric_params.
+    Also try name-based substitution for any remaining symbols.
+    If symbols still remain and default_zero=True, set them to 0 with a warning.
+    Returns a dense complex numpy array.
+    """
+    subs_primary = subs_primary or {}
+    numeric_params = numeric_params or {}
+
+    # First pass: identity-based substitution
+    M_tmp = sp.Matrix(M_sym).subs(subs_primary, simultaneous=True)
+
+    # Build name-based map from numeric_params
+    nameval = _build_nameval_from_numeric_params(numeric_params)
+
+    # Collect remaining symbols
+    remaining = sorted(list(M_tmp.free_symbols), key=lambda s: s.name)
+
+    # Second pass: name-based substitution (match by s.name)
+    name_based_pairs = {}
+    for s in remaining:
+        if s.name in nameval:
+            name_based_pairs[s] = nameval[s.name]
+
+    if name_based_pairs:
+        M_tmp = M_tmp.subs(name_based_pairs, simultaneous=True)
+
+    # Check again which symbols remain
+    remaining2 = sorted(list(M_tmp.free_symbols), key=lambda s: s.name)
+    if remaining2:
+        if default_zero:
+            print("Warnung: Unbelegte Symbole gefunden und auf 0 gesetzt:", [s.name for s in remaining2])
+            zero_map = {s: 0.0 for s in remaining2}
+            M_tmp = M_tmp.subs(zero_map, simultaneous=True)
+        else:
+            raise ValueError(f"Unbelegte Symbole in Matrix: {[s.name for s in remaining2]}")
+
+    # Ensure numeric value (evaluate) and convert to numpy
+    M_eval = sp.N(M_tmp)  # evalf
+    return np.array(M_eval.tolist(), dtype=complex)
+    #
 
 
-def plot_sigma_rho_pairs(Sigma_rho: np.ndarray, t: np.ndarray, pairs: Sequence[Tuple[int,int]], names: Optional[Sequence[str]] = None):
+def check_hermitian_psd(M, *, herm_tol=1e-10, psd_tol=1e-12, return_eigs=False, verbose=True):
     """
-    Plot trajectories of selected off-diagonals in the rho-near basis.
-    Default names: ['Reρ01','Imρ01','Reρ02','Imρ02','Reρ12','Imρ12','ρ00','ρ11','Q','P']
+    Check if matrix M is Hermitian and Positive Semi-Definite (PSD).
+
+    Parameters
+    ----------
+    M : array_like
+        Input matrix (n x n). Real or complex.
+    herm_tol : float
+        Tolerance for Hermiticity: max|M - M^†| <= herm_tol -> Hermitian.
+    psd_tol : float
+        Tolerance for PSD: min_eig(H) >= -psd_tol (with H = (M+M^†)/2).
+    return_eigs : bool
+        If True, also return all eigenvalues (ascending).
+    verbose : bool
+        If True, print a short German report.
+
+    Returns
+    -------
+    result : dict
+        {
+          "is_hermitian": bool,
+          "is_psd": bool,
+          "max_antiherm_norm": float,   # max|M - M^†|
+          "min_eig": float,             # minimal eigenvalue of Hermitian part
+          "eigvals": np.ndarray (optional)
+        }
     """
-    if names is None:
-        names = ["Reρ01","Imρ01","Reρ02","Imρ02","Reρ12","Imρ12","ρ00","ρ11","Q","P"]
-    plt.figure(figsize=(7.2, 4.4))
-    for (i, j) in pairs:
-        yij = Sigma_rho[:, i, j]
-        lab = f"{names[i]},{names[j]}"
-        plt.plot(t, np.real(yij), label=f"Re[{lab}]")
-        if np.any(np.abs(np.imag(yij)) > 0):
-            plt.plot(t, np.imag(yij), "--", label=f"Im[{lab}]")
-    plt.xlabel("Zeit"); plt.ylabel("Σ$_{ij}$ (rho-Basis)")
-    plt.title("Kovarianzen in der rho-nahen Ebene")
-    plt.legend(ncol=2, fontsize=8); plt.tight_layout(); plt.show()
+    A = np.array(M, dtype=complex, copy=False)
+
+    # Hermitian deviation (use elementwise max-norm)
+    antiherm = A - A.conjugate().T
+    max_anti = np.max(np.abs(antiherm))
+
+    is_herm = max_anti <= herm_tol
+
+    # Symmetrize to guard tiny non-Hermitian noise before PSD test
+    H = 0.5 * (A + A.conjugate().T)
+    # For numerical stability, ensure exact Hermitian symmetry numerically
+    H = 0.5 * (H + H.conjugate().T)
+
+    # Hermitian eigenvalues (ascending, real for Hermitian)
+    eigvals = np.linalg.eigvalsh(H)
+    min_eig = float(np.min(eigvals.real))
+    is_psd = min_eig >= -psd_tol
+
+    if verbose:
+        print("=== Matrix-Check: Hermitesch & PSD ===")
+        print(f"max|M - M^†| = {max_anti:.3e}  ⇒ Hermitesch: {is_herm} (Toleranz {herm_tol:g})")
+        print(f"min λ(H)     = {min_eig:.3e}  ⇒ PSD:        {is_psd} (Toleranz {psd_tol:g})")
+
+    out = {
+        "is_hermitian": bool(is_herm),
+        "is_psd": bool(is_psd),
+        "max_antiherm_norm": float(max_anti),
+        "min_eig": min_eig,
+    }
+    if return_eigs:
+        out["eigvals"] = eigvals
+    return out
+
+
+def plot_sigma_and_check_psd(
+    sol,
+    idx,
+    *,
+    take_real: bool = True,
+    tol: float = 1e-10,
+    also_uncertainty: bool = True,
+    entries=((0, 0), (1, 1), (2, 2), (8, 8), (9, 9)),
+    heatmap_times=(0.0, None),  # None -> use final time
+    save_prefix: str | None = None,
+    show_plots: bool = True,
+):
+    """
+    Reconstruct Σ(t) for all time steps, check PSD, and make diagnostic plots.
+
+    Parameters
+    ----------
+    sol : scipy.integrate.OdeResult
+        Solution returned by solve_ivp (expects .t and .y).
+    idx : dict
+        Indexing dictionary returned by prepare_system_for_solve_ivp (must contain
+        'singles_slice', 'pairs_slice', and 'pairs_order').
+    take_real : bool
+        If True, drop tiny imaginary parts of Σ and enforce a real symmetric covariance.
+    tol : float
+        PSD tolerance: min_eig >= -tol counts as PSD.
+    also_uncertainty : bool
+        If True, also check PSD of Σ + i/2·s(t) (Robertson–Schrödinger inequality).
+    entries : iterable[(i,j)]
+        Selected Σ_ij(t) entries to plot as time series.
+    heatmap_times : iterable[float|None]
+        Times to snapshot Σ(t) as heatmaps; None means the final time.
+    save_prefix : str | None
+        If set, save plots to files using this prefix (e.g., "out/sigma_psd").
+    show_plots : bool
+        If True, call plt.show() at the end.
+
+    Returns
+    -------
+    results : dict
+        {
+          "Sigmas": (nt,10,10) ndarray (Hermitian-symmetrized),
+          "lam_min_Sigma": (nt,) minimal eigenvalue of Σ(t),
+          "psd_Sigma_mask": (nt,) boolean mask,
+          "lam_min_unc": (nt,)  # only if also_uncertainty
+          "psd_unc_mask": (nt,) # only if also_uncertainty
+        }
+    """
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # --- Local, collision-safe reconstruction (avoids the stub variant) -----
+    def _reconstruct_sigma_series_local(sol, idx, take_real=True):
+        """Rebuild Σ(t_k) from packed pairs in sol.y using idx['pairs_order']."""
+        n = idx["singles_slice"].stop - idx["singles_slice"].start  # should be 10
+        pair_start = idx["pairs_slice"].start
+        pairs_order = idx["pairs_order"]
+        nt = sol.y.shape[1]
+
+        Sig = np.zeros((nt, n, n), dtype=complex)
+        for k_loc, (i, j, _sym) in enumerate(pairs_order):
+            row = pair_start + k_loc
+            traj = sol.y[row, :]               # length nt
+            Sig[:, i, j] = traj
+            Sig[:, j, i] = np.conjugate(traj)  # ensure Hermitian symmetry
+
+        if take_real:
+            Sig = np.real(Sig)
+        return Sig
+
+    # ---------- 1) Σ(t): reconstruct & enforce Hermitian ----------
+    Sigmas = _reconstruct_sigma_series_local(sol, idx, take_real=take_real)
+    # Use the helper already present in this module:
+    #   - symmetrize_hermitian(M)
+    #   - min_eigvals_hermitian_series(series)
+    for k in range(Sigmas.shape[0]):
+        Sigmas[k] = symmetrize_hermitian(Sigmas[k])  # (M + M^†)/2
+
+    lam_min_Sigma, _ = min_eigvals_hermitian_series(Sigmas)
+    psd_Sigma = is_psd_from_min(lam_min_Sigma, tol=tol)
+
+    # ---------- 2) Optional: uncertainty test Σ + i/2·s ----------
+    lam_min_unc = None
+    psd_unc = None
+    if also_uncertainty:
+        # s(t) from singles using the helper in this module
+        S_all = symplectic_series_from_solution(sol, idx)   # real, skew-symmetric
+        S_all = 0.5 * (S_all - np.transpose(S_all, (0, 2, 1)))  # guard skew
+        Sigma_plus_is_over_2 = np.empty_like(Sigmas, dtype=complex)
+        for k in range(Sigmas.shape[0]):
+            # i*s is Hermitian; Σ + i/2·s is Hermitian -> eigenvalues real
+            Sigma_plus_is_over_2[k] = symmetrize_hermitian(Sigmas[k] + 0.5j * S_all[k])
+        lam_min_unc, _ = min_eigvals_hermitian_series(Sigma_plus_is_over_2)
+        psd_unc = is_psd_from_min(lam_min_unc, tol=tol)
+
+    # ---------- 3) Console report (German) ----------
+    print("=== PSD-Prüfung über alle Zeitschritte ===")
+    print(f"Σ(t): min(λ_min) = {np.min(lam_min_Sigma):.3e},  "
+          f"Anzahl Verletzungen = {np.count_nonzero(~psd_Sigma)}")
+    if also_uncertainty:
+        print(f"Σ(t) + i/2·s(t): min(λ_min) = {np.min(lam_min_unc):.3e},  "
+              f"Anzahl Verletzungen = {np.count_nonzero(~psd_unc)}")
+
+    bad_sigma = np.where(~psd_Sigma)[0]
+    if bad_sigma.size > 0:
+        k = bad_sigma[:10]
+        print("Erste verletzte Indizes für Σ PSD:", k, "  (Zeiten ≈", sol.t[k], ")")
+    if also_uncertainty and (psd_unc is not None):
+        bad_unc = np.where(~psd_unc)[0]
+        if bad_unc.size > 0:
+            k = bad_unc[:10]
+            print("Erste verletzte Indizes für Σ + i/2·s PSD:", k, "  (Zeiten ≈", sol.t[k], ")")
+
+    # ---------- 4) Plots ----------
+    # (a) minimal eigenvalues vs time
+    plt.figure(figsize=(7.5, 4.5))
+    plt.plot(sol.t, lam_min_Sigma, label="min λ(Σ)")
+    if also_uncertainty:
+        plt.plot(sol.t, lam_min_unc, label="min λ(Σ + i/2·s)")
+    plt.axhline(0.0, linestyle="--")
+    plt.xlabel("t")
+    plt.ylabel("Minimaler Eigenwert")
+    plt.title("PSD-Tests über die Zeit")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    if save_prefix:
+        plt.savefig(f"{save_prefix}_min_eigs.png", dpi=150)
+        print(f"Plot gespeichert: {save_prefix}_min_eigs.png")
+
+    # (b) selected Σ_ij(t) entries
+    if entries:
+        plt.figure(figsize=(7.5, 4.5))
+        for (i, j) in entries:
+            y = np.real(Sigmas[:, i, j]) if np.iscomplexobj(Sigmas) else Sigmas[:, i, j]
+            plt.plot(sol.t, y, label=f"Σ[{i},{j}]")
+        plt.xlabel("t")
+        plt.ylabel("Σ_{ij}(t)")
+        plt.title("Ausgewählte Einträge der Kovarianzmatrix")
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.tight_layout()
+        if save_prefix:
+            plt.savefig(f"{save_prefix}_entries.png", dpi=150)
+            print(f"Plot gespeichert: {save_prefix}_entries.png")
+
+    # (c) heatmap snapshots at requested times
+    if heatmap_times:
+        times_eff = []
+        for tau in heatmap_times:
+            times_eff.append(sol.t[-1] if tau is None else float(tau))
+        ncols = len(times_eff)
+        plt.figure(figsize=(4.5 * ncols, 4.0))
+        for c, tau in enumerate(times_eff, 1):
+            k = int(np.argmin(np.abs(sol.t - tau)))
+            M = np.real(Sigmas[k]) if np.iscomplexobj(Sigmas) else Sigmas[k]
+            plt.subplot(1, ncols, c)
+            im = plt.imshow(M, origin="lower", aspect="equal")
+            plt.title(f"Σ @ t≈{sol.t[k]:.3g}")
+            plt.colorbar(im, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+        if save_prefix:
+            plt.savefig(f"{save_prefix}_heatmaps.png", dpi=150)
+            print(f"Plot gespeichert: {save_prefix}_heatmaps.png")
+
+    if show_plots:
+        plt.show()
+
+    results = {
+        "Sigmas": Sigmas,
+        "lam_min_Sigma": lam_min_Sigma,
+        "psd_Sigma_mask": psd_Sigma,
+    }
+    if also_uncertainty:
+        results.update({
+            "lam_min_unc": lam_min_unc,
+            "psd_unc_mask": psd_unc
+        })
+    return results
+
+
+
+
+
 
 if __name__ == "__main__":
     print("Baue kombiniertes Singles+Kovarianz-System …")
-    regular_plots=True
-    # --- (1) Symbols, sizes
-    
-    # (H) Integrate
-    t_span = (0.0, 5000.0)
+    regular_plots = True
+
+    # (1) Symbols, sizes
+    t_span = (0.0, 50.0)
     t_eval = np.linspace(*t_span, 2001)
     n = 10
     mP_syms = sp.symbols('m1:11')  # m1..m8 = x1..x8, m9=Q, m10=P
+
     g0, Delta1, V, gamma, Omega, kappa, eta, Delta2 = sp.symbols("g0 Delta1 V gamma Omega kappa eta Delta2")
-    V_val=-1/2*((8/(4))**2+1)
-    numeric_params = { g0:1, Delta1:1, Delta2:1, V:V_val, gamma:2, Omega:5, kappa:1, eta:1 }
+    Omega_val = 8
+    Gamma_val = 2
+    V_val = -0.5 * ((Omega_val / 4)**2 + 1)
+    numeric_params = { g0: 1, Delta1: 1, Delta2: 1, V: V_val, gamma: Gamma_val, Omega: Omega_val, kappa: 1, eta: 1 }
 
-    G,sDs,Z,P,Q,Z_prime,W,Sigma_dt,Sigma,K=covar.get_important_matricies(numeric_params)
+    # Pull matrices from your covar module (numeric + symbolic, if needed later)
+    G, sDs, Z, P, Q,sE, Z_prime, W, Sigma_dt, Sigma, K = covar.get_important_matricies(numeric_params)
+    G_sym, sDs_sym, Z_sym, P_sym, Q_sym,sE_sym, Z_prime_sym, W_sym, Sigma_dt_sym, Sigma_sym, K_sym = covar.get_important_matricies_symbol()
+
+    #sp.pprint(sDs_sym)
+    # # Example usage:
+    # # Suppose you have f_tensor (8x8x8 antisymmetric array) already constructed
+    # f_tensor=su3_f_tensor()
+    # mP_syms = sp.symbols('m1:11')                            # m1..m10
+    # y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    # x0 = convert_state(y0_ket)   
+    # m0_singles = np.array([*x0[2:10], x0[0], x0[1]], dtype=complex) 
+    # subs_m = { sym: complex(val) for sym, val in zip(mP_syms, m0_singles) }
+    # C = build_C_full(f_tensor, boson_factor=2)
+    # G0 = numeric_matrix_from_sym(G_sym, subs_primary=subs_m, numeric_params=numeric_params, default_zero=True)
+    # W0 = numeric_matrix_from_sym(W_sym, subs_primary=subs_m, numeric_params=numeric_params, default_zero=True)
+
+    # # --- 4) Kommutator-Matrix C bauen (zustandsunabhängig) -------------------------
+
+    # f_tensor = su3_f_tensor()
+    # C = build_C_full(f_tensor, boson_factor=2.0)  # [Q,P] with [Q,P] = i*2
+
+    # # --- 5) check(m(0)) berechnen und drucken -------------------------------------
+
+    # check0 = W0 + 1j/2.0 * (C - G0 @ C @ G0.T)
+
+    # print("\ncheck-Matrix am Anfang (mit Initialzustand eingesetzt):")
+    # with np.printoptions(precision=6, suppress=True, linewidth=160):
+    #     sp.pprint(sp.Matrix(check0))
+    #     res = check_hermitian_psd(check0, herm_tol=1e-12, psd_tol=1e-12, return_eigs=True)
+
     
-    G_sym,sDs_sym,Z_sym,P_sym,Q_sym,Z_prime_sym,W_sym,Sigma_dt_sym,Sigma_sym,K_sym=covar.get_important_matricies_symbol()
 
-
-    # (A) We assume Sigma_dt already has the correct symbolic form and ordering
+    # (2) Prepare pair system
     Sigma_dt_clean = Sigma_dt
-    
-    #print("PSD ?",is_psd_numeric(W))
-    #sp.pprint(W_sym)
-    #sp.pprint(Sigma_dt_sym)
-    #print("W",check_symmetry(W))
-    #print("dSigma_dt",check_symmetry(Sigma_dt))
-    #print("P",check_symmetry(P))
-
-    #(B) Prepare pair system (no extra params if Sigma_dt is already numeric in phys. params)
     idx, rhs_pairs_func = prepare_system_for_solve_ivp(
         mP_syms=mP_syms,
         Sigma_dt=Sigma_dt_clean,
         symmetric_pairs=True,
-        extra_params=()     # if Sigma_dt still contains parameters, pass them here instead
+        extra_params=()
     )
 
-    # (C) Singles-phys. Parameter (für deine Singles-RHS)
+    # (3) Singles physical parameters (for your singles RHS)
     params = dict(
-        g0=1,kappa=1.0, gamma=1.0, Gamma=2.0,
-        Omega=5.0, delta1=1.0, delta2=1.0,
-        eta=1.0, V=V_val#-8.0
+        g0=1, kappa=1.0, gamma=1.0, Gamma=Gamma_val,
+        Omega=Omega_val, delta1=1.0, delta2=1.0,
+        eta=1.0, V=V_val
     )
 
-    # (D) Build combined RHS
+    # (4) Combined RHS
+    def make_combined_rhs(idx, rhs_pairs_func, params_dict, extra_param_values_tuple=()):
+        """
+        Returns fun(t,y) -> concatenated derivatives for singles+pairs.
+        - Singles part uses your rhs via 'singles_rhs_from_m_order'.
+        - Pairs part uses lambdified Sigma_dt (expects all state entries separately).
+        """
+        s_slice = idx["singles_slice"]
+        p_slice = idx["pairs_slice"]
+
+        def fun(t, y):
+            # Ensure complex dtype for singles consistency
+            y = y.astype(complex, copy=False)
+
+            # (1) Singles dynamics in m-order
+            y_singles = y[s_slice]
+            dy_singles = singles_rhs_from_m_order(t, y_singles, params_dict)  # complex (10,)
+
+            # (2) Pair dynamics via lambdify (works with real or complex; cast to complex)
+            args = tuple(y.tolist()) + tuple(extra_param_values_tuple)
+            dy_pairs = np.asarray(rhs_pairs_func(*args)).astype(complex, copy=False)
+
+            return np.concatenate([dy_singles, dy_pairs])
+
+        return fun
+
     fun = make_combined_rhs(idx, rhs_pairs_func, params_dict=params, extra_param_values_tuple=())
 
-    # (E) Initial conditions
+    # (5) Initial conditions
     # 11-d ket IC -> x-space -> m-order [x1..x8, Q, P]
-    y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    #y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    #[da_dt, da_dagger_dt, d00, d01, d10, d11, d22, d21, d12, d20, d02]
+    y0_ket = np.array([0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j])
     x0 = convert_state(y0_ket)  # [Q,P,x1..x8]
     m0_singles = np.array([*x0[2:10], x0[0], x0[1]], dtype=complex)
 
@@ -1027,90 +1187,32 @@ if __name__ == "__main__":
 
     y0 = np.concatenate([m0_singles, m0_pairs])
 
-    # (F) Smoke-test: rhs_pairs_func must accept a flat state -> returns correct length
+    # (6) Smoke-test: rhs_pairs_func must accept a flat state -> returns correct length
     y_len = len(idx["state_symbols"])
     try:
-        _ = rhs_pairs_func(*([0.0]*y_len))
+        _ = rhs_pairs_func(*([0.0] * y_len))
         print("Lambdify-Test OK – Länge z-Ausgabe =", len(_))
     except Exception as e:
         print("Lambdify-Test FEHLER:", repr(e))
 
-    # (G) Numerical RHS check at t=0 (optional)
+    # (7) Numerical RHS check at t=0 (optional)
     print("\n===== Numerischer RHS-Check bei t=0 =====")
     dy_singles0 = singles_rhs_from_m_order(0.0, y0[idx["singles_slice"]], params)
     dy_pairs0   = np.asarray(rhs_pairs_func(*y0.tolist()))
     print("Singles @0:", dy_singles0)
-    print("Erste 10 Paar-Ableitungen @0:", dy_pairs0[:10])
 
-
-    print("Starte Integration mit solve_ivp …")
+    # (8) Integrate
     sol = solve_ivp(fun, t_span, y0, t_eval=t_eval, method="RK45", rtol=1e-8, atol=1e-8)
 
-
-    if sol.success:
-        series = compute_JRSRJ_fast(sol, step=1)
-        print_JRSRJ_first_last(series)
-        SJR = compute_SJR_fast(sol, step=1, compute_JR=True)
-        # ============================
-        # Verwendung nach deiner Integration + SJR
-        # ============================
-        Sigmas = reconstruct_sigma_series(sol, idx, take_real=True)
-        Sigma_tilde = transform_sigma_series(Sigmas, SJR)
-
-            # 1) PSD-Checks (original & transformiert)
-        print("PSD-Check für Σ(t) …")
-        mins_S, bad_S = check_psd_series(Sigmas, sol.t, name="Σ", tol=1e-12, do_plot=True)
-
-        print("PSD-Check für Σ̃(t) …")
-        mins_St, bad_St = check_psd_series(Sigma_tilde, SJR["t"], name="Σ̃", tol=1e-12, do_plot=True)
-   
-        # 2) Rücktransformation: Kovarianzen in einer rho-nahen Ebene
-        Sigma_rho = sigma_rho_series_from_sigma(Sigmas)  # nutzt Σ in m=[x1..x8,Q,P]
-        names_rho = ["Reρ01","Imρ01","Reρ02","Imρ02","Reρ12","Imρ12","ρ00","ρ11","Q","P"]
-
-        # Beispielplots der zeitlichen Korrelationen:
-        # - Q mit Re(ρ01) und Im(ρ01)
-        plot_sigma_rho_pairs(Sigma_rho, sol.t, pairs=[(8,0), (8,1)], names=names_rho)
-        # - Q, P mit den Populations-Kovarianzen
-        plot_sigma_rho_pairs(Sigma_rho, sol.t, pairs=[(8,6), (9,7)], names=names_rho)
-        names = ["x1","x2","x3","x4","x5","x6","x7","x8","Q","P"]
-        # 1) Alle Diagonalen (Variancen) plotten
-        #plot_sigma_tilde_diagonals(Sigma_tilde, SJR["t"], names=names)
-
-        # 2) Beispiel Off-Diagonalen: x3–x7 und Q–P
-        plot_sigma_tilde_pairs(Sigma_tilde, SJR["t"], pairs=[(7,9), (7,8)], names=names)
-
-        # 3) Optional: nur bestimmte Diagonalen (z. B. x1,x2,Q,P)
-        #plot_sigma_tilde_diagonals(Sigma_tilde, SJR["t"], names=names, indices=[0,1,8,9])
-
-        plot_sigma_tilde_pairs(Sigma_tilde, SJR["t"], pairs=[(6,7)], names=names)
-
-    #(I) Plots
-    if sol.success and regular_plots:
-        # Populations aus Singles
-        t_vals = sol.t
-        Q = sol.y[8, :]
-        P = sol.y[9, :]
-        x1_to_x8 = [sol.y[i, :] for i in range(8)]
-        x_stream = np.vstack([Q, P, *x1_to_x8])  # 0:Q,1:P,2:x1,...,9:x8
-
-        sqrt3 = np.sqrt(3.0)
-        x3 = x_stream[4, :]
-        x8_ = x_stream[9, :]
-        sum00_11 = (2 + sqrt3 * x8_) / 3
-        rho00 = np.real((sum00_11 + x3)/2)
-        rho11 = np.real((sum00_11 - x3)/2)
-        rho22 = 1 - rho00 - rho11
-
-        plt.figure(figsize=(6,4))
-        plt.plot(t_vals, rho00, label=r'$\rho_{00}$')
-        plt.plot(t_vals, rho11, label=r'$\rho_{11}$')
-        plt.plot(t_vals, rho22, label=r'$\rho_{22}$')
-        plt.plot(t_vals, rho00+rho11+rho22, '--', color='gray', label='Spur')
-        plt.xlabel('Zeit'); plt.ylabel('Population'); plt.legend(); plt.tight_layout()
-
-        # Diagonale Fluktuationen m_i m_i
-        plot_diagonal_fluctuations(idx, sol, names=["x1","x2","x3","x4","x5","x6","x7","x8","Q","P"])
-        plt.show()
-    else:
-        print("Integration fehlgeschlagen:", sol.message)
+    plot_populations_and_sigma(sol, idx, only_upper_sigma=False)
+    res = plot_sigma_and_check_psd(
+    sol, idx,
+    take_real=True,
+    tol=1e-10,
+    also_uncertainty=True,
+    entries=((0,0),(1,1),(2,2),(8,8),(9,9)),
+    heatmap_times=(sol.t[0], sol.t[len(sol.t)//2], None),  # start, mid, final
+    save_prefix=None,  # or e.g. "out/sigma_psd"
+    show_plots=True
+)
+    sp.pprint(P_sym)

@@ -230,7 +230,7 @@ def run_all():
         p,q = 10,9
         for a in range(1,11):
             for c in range(1,11):
-                M[a-1,c-1] = sp.simplify(kappa/8*(
+                M[a-1,c-1] = sp.simplify(kappa/2*(
                     sp.KroneckerDelta(a,p)*sp.KroneckerDelta(c,p)
                     + sp.KroneckerDelta(a,q)*sp.KroneckerDelta(c,q)
                 ))
@@ -371,5 +371,5 @@ def run_all():
     Z=sp.simplify((Z_prime+Z_prime.T)/2)
     W=sDs+Z
     print("done computing Z, Z', sDs, Q, G ...")
-    return G,sDs,Z,P,Q,Z_prime,W
+    return G,sDs,Z,P,Q,sE,Z_prime,W
 
