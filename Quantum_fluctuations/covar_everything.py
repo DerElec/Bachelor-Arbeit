@@ -6,39 +6,72 @@ import symplectic_matrix as symplect
 import numpy as np
 import skew_matrix_example as skew
 
+# def input_numerics(numeric_params, *matrices):
+#     """
+#     Substitute all non-'m' symbols in multiple SymPy matrices.
+
+#     Parameters
+#     ----------
+#     numeric_params : dict
+#         Mapping from SymPy Symbol objects to numerical values.
+#         Must NOT contain the 'm...' parameters that should remain symbolic.
+#     *matrices : sympy.Matrix
+#         One or more SymPy matrices to be processed.
+
+#     Returns
+#     -------
+#     list[sympy.Matrix]
+#         A list of matrices with the requested substitutions applied,
+#         in the same order in which the matrices were passed in.
+#     """
+
+#     # --- 1) Collect every free symbol that appears in any matrix -------------
+#     all_syms = set().union(*(M.free_symbols for M in matrices))
+
+#     # --- 2) Build the substitution dictionary once ---------------------------
+#     subs_dict = {
+#         sym: numeric_params[sym]           # take the numeric value
+#         for sym in all_syms
+#         if not sym.name.startswith("m")    # skip 'm…' parameters
+#            and sym in numeric_params       # skip symbols without a given value
+#     }
+
+#     # --- 3) Apply substitutions to every matrix ------------------------------
+#     return [M.subs(subs_dict) for M in matrices]
 def input_numerics(numeric_params, *matrices):
     """
-    Substitute all non-'m' symbols in multiple SymPy matrices.
-
-    Parameters
-    ----------
-    numeric_params : dict
-        Mapping from SymPy Symbol objects to numerical values.
-        Must NOT contain the 'm...' parameters that should remain symbolic.
-    *matrices : sympy.Matrix
-        One or more SymPy matrices to be processed.
-
-    Returns
-    -------
-    list[sympy.Matrix]
-        A list of matrices with the requested substitutions applied,
-        in the same order in which the matrices were passed in.
+    Substitute all non-'m...' symbols in multiple SymPy matrices.
+    Erst Identitäts-Mapping (SymPy-Symbolobjekte), dann Fallback per .name.
     """
-
-    # --- 1) Collect every free symbol that appears in any matrix -------------
+    # 1) Alle freien Symbole einsammeln
     all_syms = set().union(*(M.free_symbols for M in matrices))
 
-    # --- 2) Build the substitution dictionary once ---------------------------
-    subs_dict = {
-        sym: numeric_params[sym]           # take the numeric value
+    # 2) Erstes Substitutions-Dict: Identitäts-Match (so wie bisher)
+    subs_ident = {
+        sym: numeric_params[sym]
         for sym in all_syms
-        if not sym.name.startswith("m")    # skip 'm…' parameters
-           and sym in numeric_params       # skip symbols without a given value
+        if (not sym.name.startswith("m")) and (sym in numeric_params)
     }
 
-    # --- 3) Apply substitutions to every matrix ------------------------------
-    return [M.subs(subs_dict) for M in matrices]
+    # 3) Anwenden (identitätsbasiert)
+    mats_tmp = [M.subs(subs_ident, simultaneous=True) for M in matrices]
 
+    # 4) Fallback per Namen: baue name->value Map aus numeric_params
+    nameval = {}
+    for k, v in numeric_params.items():
+        name = k.name if isinstance(k, sp.Symbol) else str(k)
+        nameval[name] = v
+
+    # 5) Sammle verbleibende Symbole und ersetze per .name
+    out = []
+    for M in mats_tmp:
+        remaining = [s for s in M.free_symbols if not s.name.startswith("m")]
+        subs_by_name = {s: nameval[s.name] for s in remaining if s.name in nameval}
+        if subs_by_name:
+            M = M.subs(subs_by_name, simultaneous=True)
+        out.append(M)
+
+    return out
 
 def replace_lambda_q_p(*objects):
     """

@@ -1,9 +1,10 @@
 import sympy as sp
+import numpy as np
 def run_all():
     # -----------------------------
     # Symbolische Konstanten
     # -----------------------------
-    gamma, kappa = sp.symbols('gamma kappa')
+    Gamma, kappa = sp.symbols('Gamma kappa')
     m = sp.symbols('m1:9')  # m1, ..., m8
     I = sp.I
 
@@ -81,7 +82,7 @@ def run_all():
         return f, d
 
 
-    def compute_R_from_f_d(f_arr, d_arr, gamma=None, simplify_entries=False):
+    def compute_R_from_f_d(f_arr, d_arr, Gamma=None, simplify_entries=False):
         """
         Build the 8x8 diffusion matrix R_ab using numeric structure constants f,d
         (nested Python lists with SymPy numbers).
@@ -91,8 +92,8 @@ def run_all():
         """
         I = sp.I
         PHYS_DIM = 8
-        if gamma is None:
-            gamma = sp.symbols('gamma', real=True)
+        if Gamma is None:
+            Gamma = sp.symbols('Gamma', real=True)
 
         # IMPORTANT: treat m_k as real so that "realness" checks can simplify
         m = sp.symbols('m1:9', real=True)  # (m1,...,m8) are real
@@ -114,12 +115,12 @@ def run_all():
 
                         expr += T_cd * U_ac * V_bd
 
-                R[a-1, b-1] = gamma * (sp.simplify(expr) if simplify_entries else expr)
+                R[a-1, b-1] = Gamma * (sp.simplify(expr) if simplify_entries else expr)
 
-        return sp.Matrix(R), {'gamma': gamma, 'm': m, 'f': f_arr, 'd': d_arr}
+        return sp.Matrix(R), {'Gamma': Gamma, 'm': m, 'f': f_arr, 'd': d_arr}
 
 
-    def compute_R_su3(gamma=None, simplify_entries=False):
+    def compute_R_su3(Gamma=None, simplify_entries=False):
         """
         Convenience wrapper:
         - builds Gell-Mann matrices,
@@ -129,11 +130,11 @@ def run_all():
         Returns
         -------
         R : sympy.Matrix (8x8)
-        data : dict with 'gamma','m','f','d','lambdas'
+        data : dict with 'Gamma','m','f','d','lambdas'
         """
         lambdas = build_gellmann()
         f_arr, d_arr = structure_constants_from_lambdas(lambdas)
-        R, syms = compute_R_from_f_d(f_arr, d_arr, gamma=gamma, simplify_entries=simplify_entries)
+        R, syms = compute_R_from_f_d(f_arr, d_arr, Gamma=Gamma, simplify_entries=simplify_entries)
         syms.update({'lambdas': lambdas})
         return R, syms
 
@@ -199,7 +200,7 @@ def run_all():
         2) Check if (Z8 * Z8.T)/2 is real.
         3) Embed Z8 into a 10x10 matrix (top-left block), zeros elsewhere.
         """
-        Z8, syms = compute_R_su3(gamma=None, simplify_entries=False)
+        Z8, syms = compute_R_su3(Gamma=None, simplify_entries=False)
 
         # Realness check for (Z8 * Z8^T) / 2
         ok, ImS = check_half_MM_T_real(Z8)
@@ -252,42 +253,149 @@ def run_all():
     # -----------------------------
     # P-Matrix Berechnung
     # -----------------------------
+    # mP = sp.symbols('m1:11')
+    # #F = sp.symbols('F1:11')
+    # g0, V_const = sp.symbols('g0 V')
+    # Delta1,Delta2, Omega, N, eta = sp.symbols('Delta1 Delta2 Omega N eta')
+
+    # h9 = g0; h10 = -g0; h88 = V_const/3
+    # omega = [0,0,-Delta1,0,0,Omega,0,-2*V_const/(3*sp.sqrt(3))-(2/sp.sqrt(3))*Delta2,0,2*sp.sqrt(N)*eta]
+
+    # f_P = lambda g,a,c: f_sym(g,a,c) if g<=8 and a<=8 and c<=8 else 0
+
+    # P = sp.zeros(10)
+    # for a in range(1,11):
+    #     for G in range(1,11):
+    #         coeff = 0
+    #         if G==9:
+    #             sumA = sum(f_P(1,a,c)*mP[c-1] for c in range(1,9))
+    #             coeff += -h9*2*sumA
+    #         if G<=8:
+    #             coeff += -h9*2*mP[8]*f_P(1,a,G)
+    #         if G==1:
+    #             coeff += -h9*(sp.Rational(1,2) if a==10 else 0)
+    #         if G==10:
+    #             sumB = sum(f_P(2,a,c)*mP[c-1] for c in range(1,9))
+    #             coeff += -h10*2*sumB
+    #         if G<=8:
+    #             coeff += -h10*2*mP[9]*f_P(2,a,G)
+    #         if G==2:
+    #             coeff += h10*(sp.Rational(1,2) if a==9 else 0)
+    #         if G==8:
+    #             coeff += -h88*4*f_P(8,a,G)*mP[G-1]
+    #         if G<=8:
+    #             coeff += -h88*4*mP[7]*f_P(8,a,G)
+    #         if G<=8:
+    #             for i in range(1,9): coeff += -omega[i-1]*f_P(i,a,G)*2# - ACHTUNG HIER BEARBEITET
+    #         P[a-1,G-1] = sp.factor(coeff)#*F[G-1]
+
+
+    # --- Symbols (keep same names as in your code) ---
+    Delta1, Delta2, Omega = sp.symbols('Delta1 Delta2 Omega', real=True)
+    V_const, eta, g0   = sp.symbols('V eta g0', real=True)
+    # Singles m1..m10 (1..8 = SU(3); 9 = q; 10 = p)
     mP = sp.symbols('m1:11')
-    #F = sp.symbols('F1:11')
-    g0, V_const = sp.symbols('g0 V')
-    Delta1,Delta2, Omega, N, eta = sp.symbols('Delta1 Delta2 Omega N eta')
 
-    h9 = g0; h10 = -g0; h88 = V_const/3
-    omega = [0,0,-Delta1,0,0,Omega,0,-2*V_const/(3*sp.sqrt(3))-(2/sp.sqrt(3))*Delta2,0,2*sp.sqrt(N)*eta]
+    # You must provide f_sym(i,a,G) elsewhere (unchanged).
+    def f_P(i, a, G):
+        """Return f_{i a G} for SU(3) part, else 0 (keeps your old contract)."""
+        if 1 <= i <= 8 and 1 <= a <= 8 and 1 <= G <= 8:
+            return f_sym(i, a, G)
+        return 0
 
-    f_P = lambda g,a,c: f_sym(g,a,c) if g<=8 and a<=8 and c<=8 else 0
+    # --- Linear coefficients ω_i from corrected H_N ---
+    # ω_3 = -Δ1/2 ; ω_6 = +Ω/2 ; ω_8 = (Δ1/2 - Δ2 - 2V/3)/√3 ; ω_10 = 2√N η
+    omega = {i: sp.Integer(0) for i in range(1, 11)}
+    omega[3]  = -Delta1/2
+    omega[6]  =  Omega/2
+    omega[8]  = (Delta1/2 - Delta2 - 2*V_const/3) / sp.sqrt(3)
+    omega[10] =  2*eta  # belasse √N, wie du es vorher genutzt hast
 
-    P = sp.zeros(10)
-    for a in range(1,11):
-        for G in range(1,11):
-            coeff = 0
-            if G==9:
-                sumA = sum(f_P(1,a,c)*mP[c-1] for c in range(1,9))
-                coeff += -h9*2*sumA
-            if G<=8:
-                coeff += -h9*2*mP[8]*f_P(1,a,G)
-            if G==1:
-                coeff += -h9*(sp.Rational(1,2) if a==10 else 0)
-            if G==10:
-                sumB = sum(f_P(2,a,c)*mP[c-1] for c in range(1,9))
-                coeff += -h10*2*sumB
-            if G<=8:
-                coeff += -h10*2*mP[9]*f_P(2,a,G)
-            if G==2:
-                coeff += h10*(sp.Rational(1,2) if a==9 else 0)
-            if G==8:
-                coeff += -h88*4*f_P(8,a,G)*mP[G-1]
-            if G<=8:
-                coeff += -h88*4*mP[7]*f_P(8,a,G)
-            if G<=8:
-                for i in range(1,9): coeff += -omega[i-1]*f_P(i,a,G)*2# - ACHTUNG HIER BEARBEITET
-            P[a-1,G-1] = sp.factor(coeff)#*F[G-1]
+    # --- Quadratic couplings h_{μν} (symmetric), with γ absorbed in g0 ---
+    # Convention: H_ia = (ħ/N) * sum_{μν} h_{μν} m_μ m_ν
+    h = {}
+    def set_h(mu, nu, val):
+        h[(mu, nu)] = val
+        h[(nu, mu)] = val
 
+    # Light–matter: g0 (m1*q + m2*p)  -> note: plus for m2*p with your q,p def
+    set_h(1, 9,  g0/np.sqrt(2))
+    set_h(2, 10, g0/np.sqrt(2))
+
+    # V-term quadratic piece: (V/3) m8^2
+    set_h(8, 8, V_const/3)
+
+    # --- Build symbolic P(m; params) ---
+    def build_P_sym():
+        P = sp.zeros(10, 10)
+
+        # (1) Linear H0 contribution: P^{(0)}_{aG} = sum_i ω_i f_{i a G}
+        for a in range(1, 11):
+            for G in range(1, 11):
+                if a <= 8 and G <= 8:
+                    P[a-1, G-1] += sum(omega[i] * f_P(i, a, G) for i in (3, 6, 8))
+                # (bosonic rows a=9,10: no f-contribution from H0)
+
+        # (2) Bilinear H_ia contribution:
+        #     P^{(ia)}_{aG} = (2/N) * sum_{μ,ν} h_{μν} * m_μ * f_{ν a G}    (ν<=8)
+        #                   + (2/N) * sum_{ν} h_{Gν} * sum_c f_{ν a c} m_c  (only for G=9,10)
+        for a in range(1, 11):
+            for G in range(1, 11):
+                # First term: atomic columns G<=8
+                if a <= 8 and G <= 8:
+                    s = 0
+                    for (mu, nu), hval in h.items():
+                        if 1 <= nu <= 8:
+                            s += hval * mP[mu-1] * f_P(nu, a, G)
+                    P[a-1, G-1] += (2) * s
+
+                # Second term: bosonic columns (G=9,10)
+                if a <= 8 and G in (9, 10):
+                    s = 0
+                    for nu in range(1, 9):
+                        hGnu = h.get((G, nu), 0)
+                        if hGnu != 0:
+                            s += hGnu * sum(f_P(nu, a, c) * mP[c-1] for c in range(1, 9))
+                    if s != 0:
+                        P[a-1, G-1] += (2) * s
+
+        # (3) Bosonic rows from canonical equations:
+        #     qdot = + g0 * m2 + 2N*eta     -> P[9,2]  = + g0  (inhom. 2N*eta not in P)
+        #     pdot = - g0 * m1              -> P[10,1] = - g0
+        P[9-1,  2-1] +=  g0/np.sqrt(2)
+        P[10-1, 1-1] += -g0/np.sqrt(2)
+
+        return sp.simplify(P)
+
+
+    # --- Numeric wrapper so your old code can use a ready-to-evaluate P ---
+    # def P_numeric(numeric_params: dict, m_vec: np.ndarray) -> np.ndarray:
+    #     """
+    #     Return P as a numeric (complex) numpy array after substituting:
+    #     - parameters from numeric_params (keys: Delta1, Delta2, Omega, V, N, eta, g0)
+    #     - current singles m1..m10 from m_vec
+    #     """
+    #     # Build substitution dict (params)
+    #     subs = {}
+    #     for key, sym in [('Delta1', Delta1), ('Delta2', Delta2), ('Omega', Omega),
+    #                     ('V', V_const), ('eta', eta), ('g0', g0)]:
+    #         if key in numeric_params:
+    #             subs[sym] = float(numeric_params[key])
+    #         else:
+    #             raise KeyError(f"Fehlender Parameter: {key}")
+
+    #     # Add singles m1..m10
+    #     if len(m_vec) != 10:
+    #         raise ValueError("Erwarte m_vec mit Länge 10 (m1..m10).")
+    #     for i in range(10):
+    #         subs[mP[i]] = float(m_vec[i])
+
+    #     P_eval = np.array(P_sym.subs(subs), dtype=np.complex128)
+    #     return P_eval
+    P=build_P_sym()
+    P = sp.simplify(P)
+    #sp.pprint(P)
+    print("P-Matrix (symbolisch) aufgebaut.")
     # -----------------------------
     # Q-Matrix Berechnung
     # -----------------------------
@@ -315,9 +423,141 @@ def run_all():
                     t8 = I*f_2ac*(d_c2k + I*f_c2k)
                     tot += t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8
                 Q[k-1,alpha-1] = sp.simplify(tot)
-        return (gamma/4)*Q
+        return (Gamma/4)*Q
 
-    Q = compute_Q()
+
+
+    # def compute_Q_with_deltas(
+    #     Gamma,
+    #     PHYS_DIM,
+    #     f_sym,
+    #     d_arr,
+    #     *,
+    #     id_index=None,   # 1-based index of the identity operator in your basis; use None if no identity present
+    #     sqrtN=1          # set to sqrt(N) if you want the overall 1/sqrt(N) factor; use 1 to omit it
+    # ):
+    #     """
+    #     Build the Q-matrix implementing the dissipator D[F_alpha] in your operator basis.
+
+    #     The formula used corresponds to:
+    #         D[F_α] = (Γ / (4 √N)) sum_{c,k} [
+    #             + i f^{α1c} ( (2/3) δ_{1c} I + (d_{1ck} + i f_{1ck}) λ_k )
+    #             +   f^{α1c} ( (2/3) δ_{2c} I + (d_{2ck} + i f_{2ck}) λ_k )
+    #             -   f^{α2c} ( (2/3) δ_{1c} I + (d_{1ck} + i f_{1ck}) λ_k )
+    #             + i f^{α2c} ( (2/3) δ_{2c} I + (d_{2ck} + i f_{2ck}) λ_k )
+    #             + i f^{1αc} ( (2/3) δ_{c1} I + (d_{c1k} + i f_{c1k}) λ_k )
+    #             -   f^{1αc} ( (2/3) δ_{c2} I + (d_{c2k} + i f_{c2k}) λ_k )
+    #             +   f^{2αc} ( (2/3) δ_{c1} I + (d_{c1k} + i f_{c1k}) λ_k )
+    #             + i f^{2αc} ( (2/3) δ_{c2} I + (d_{c2k} + i f_{c2k}) λ_k )
+    #         ]
+
+    #     Basis conventions:
+    #     - Indices α,k,c run from 1..PHYS_DIM for your chosen operator set.
+    #     - If `id_index` is None, the (2/3) δ ... * I parts are dropped (they live outside traceless SU(3)).
+    #     If `id_index` is an integer (1-based), the identity contributions are accumulated into the
+    #     corresponding row `id_index` of Q.
+
+    #     Parameters
+    #     ----------
+    #     Gamma : sympy.Symbol or number
+    #         Dissipation rate Γ.
+    #     PHYS_DIM : int
+    #         Size of your operator basis.
+    #     f_sym : callable
+    #         Function f_sym(a,b,c) returning f^{abc}. Assumed antisymmetric as usual.
+    #     d_arr : array-like
+    #         d_arr[a-1][b-1][c-1] = d^{abc} (0-based storage).
+    #     id_index : int or None, optional
+    #         1-based position of the identity operator in your basis; None if not present.
+    #     sqrtN : number, optional
+    #         Use sqrtN = sp.sqrt(N) (or numeric value) to include the overall 1/√N factor.
+
+    #     Returns
+    #     -------
+    #     Q : sympy.Matrix (PHYS_DIM x PHYS_DIM)
+    #         The superoperator block Q with all delta contributions included as applicable.
+    #     """
+    #     I = sp.I
+    #     delta = sp.KroneckerDelta
+
+    #     Q = sp.zeros(PHYS_DIM)
+
+    #     # Helper to add identity-channel contributions if identity exists in basis
+    #     def add_identity_contrib(alpha, c, coeff):
+    #         """
+    #         Adds (2/3) * delta * coeff to the identity row (id_index), column alpha.
+    #         'coeff' already contains the appropriate i * f^{..} or +/- f^{..} prefactor.
+    #         """
+    #         if id_index is None:
+    #             return  # no identity in basis -> drop contribution (correct in traceless SU(3))
+    #         # Accumulate into the identity operator's row; column is α (1-based to 0-based)
+    #         Q[id_index - 1, alpha - 1] += (sp.Rational(2, 3)) * coeff
+
+    #     # Main loops: α (column), k (row), c (summation)
+    #     for alpha in range(1, PHYS_DIM - 1):
+    #         for k in range(1, PHYS_DIM - 1):
+    #             tot_lambda = 0  # contributions multiplying λ_k
+    #             for c in range(1, PHYS_DIM - 1):
+    #                 # f and d tensors (note: d_arr is 0-based in storage)
+    #                 f_a1c = f_sym(alpha, 1, c); f_a2c = f_sym(alpha, 2, c)
+    #                 f_1ac = f_sym(1, alpha, c); f_2ac = f_sym(2, alpha, c)
+
+    #                 d_1ck = d_arr[0][c-1][k-1]; f_1ck = f_sym(1, c, k)
+    #                 d_2ck = d_arr[1][c-1][k-1]; f_2ck = f_sym(2, c, k)
+    #                 d_c1k = d_arr[c-1][0][k-1]; f_c1k = f_sym(c, 1, k)
+    #                 d_c2k = d_arr[c-1][1][k-1]; f_c2k = f_sym(c, 2, k)
+
+    #                 # --- λ_k parts (exactly your original t1..t8 structure) ---
+    #                 t1 = I * f_a1c * (d_1ck + I * f_1ck)
+    #                 t2 =       f_a1c * (d_2ck + I * f_2ck)
+    #                 t3 = -     f_a2c * (d_1ck + I * f_1ck)
+    #                 t4 = I *   f_a2c * (d_2ck + I * f_2ck)
+    #                 t5 = I *   f_1ac * (d_c1k + I * f_c1k)
+    #                 t6 = -     f_1ac * (d_c2k + I * f_c2k)
+    #                 t7 =       f_2ac * (d_c1k + I * f_c1k)
+    #                 t8 = I *   f_2ac * (d_c2k + I * f_c2k)
+
+    #                 tot_lambda += (t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8)
+
+    #                 # --- Identity parts: (2/3) δ * I ---
+    #                 # They do NOT depend on k, so we add them once per (alpha,c) into the identity row.
+    #                 # Group them with the same prefactors as above, but without the (d+if) pieces.
+    #                 # Terms:
+    #                 #   i f^{α1c} * (2/3) δ_{1c} I
+    #                 #   + f^{α1c} * (2/3) δ_{2c} I
+    #                 #   - f^{α2c} * (2/3) δ_{1c} I
+    #                 #   + i f^{α2c} * (2/3) δ_{2c} I
+    #                 #   + i f^{1αc} * (2/3) δ_{c1} I
+    #                 #   -   f^{1αc} * (2/3) δ_{c2} I
+    #                 #   +   f^{2αc} * (2/3) δ_{c1} I
+    #                 #   + i f^{2αc} * (2/3) δ_{c2} I
+
+    #                 # careful: add only once per (alpha, c); do not replicate over k
+    #                 if k == 1:  # arbitrary guard to run once per c; you can also move outside the k-loop
+    #                     add_identity_contrib(alpha, c,  I * f_a1c * delta(1, c))
+    #                     add_identity_contrib(alpha, c,        f_a1c * delta(2, c))
+    #                     add_identity_contrib(alpha, c, -      f_a2c * delta(1, c))
+    #                     add_identity_contrib(alpha, c,  I *   f_a2c * delta(2, c))
+
+    #                     add_identity_contrib(alpha, c,  I *   f_1ac * delta(c, 1))
+    #                     add_identity_contrib(alpha, c, -      f_1ac * delta(c, 2))
+    #                     add_identity_contrib(alpha, c,        f_2ac * delta(c, 1))
+    #                     add_identity_contrib(alpha, c,  I *   f_2ac * delta(c, 2))
+
+    #             # Assign λ_k contributions to Q (row k, column α)
+    #             Q[k-1, alpha-1] += sp.simplify(tot_lambda)
+
+    #     # Overall prefactor Γ/(4√N)
+    #     pref = Gamma / (4 * sqrtN)
+    #     return sp.simplify(pref * Q)
+
+
+
+
+
+
+    #Q = compute_Q_with_deltas(Gamma, PHYS_DIM=10, f_sym=f_sym, d_arr=d_arr, id_index=None, sqrtN=1)  #compute_Q()
+    Q=compute_Q()
 
     # -----------------------------
     # Matrix G = P + sE + Q
@@ -355,7 +595,7 @@ def run_all():
 
                         expr += T_cd * f_ac_minus * f_bd_plus
 
-                Z8[a-1, b-1] = gamma * sp.simplify(expr)
+                Z8[a-1, b-1] = Gamma * sp.simplify(expr)
 
         # Embed 8x8 into 10x10 (top-left)
         Zp = sp.zeros(DIM)
@@ -369,7 +609,7 @@ def run_all():
 
     Z_prime=compute_Z_prime_new()
     Z=sp.simplify((Z_prime+Z_prime.T)/2)
-    W=sDs+Z
+    W=Z-sDs
     print("done computing Z, Z', sDs, Q, G ...")
     return G,sDs,Z,P,Q,sE,Z_prime,W
 

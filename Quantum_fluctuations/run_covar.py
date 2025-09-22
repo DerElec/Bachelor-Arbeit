@@ -16,46 +16,225 @@ import symplectic_matrix as symplect
 # === Symplectic form s from singles in m-order = [x1..x8,Q,P]
 # ============================================================
 
+
 def su3_f_tensor() -> np.ndarray:
     """
-    Return f[a,b,c] for SU(3) in the standard Gell-Mann basis (a,b,c = 0..7 for λ1..λ8).
-    Only ascending triples are set positive; all others follow by total antisymmetry.
+    Return f[a,b,c] for SU(3) (0-based for λ1..λ8).
+    Only ascending base triples are set; total antisymmetry fills the rest.
     """
     f = np.zeros((8, 8, 8), dtype=float)
-
-    # Positive base (ascending index triples; 1-based in literature -> 0-based here):
     pos = [
         (0,1,2, 1.0),                        # f_{123} = 1
         (0,3,6, 0.5), (1,3,5, 0.5), (1,4,6, 0.5),
         (2,3,4, 0.5), (2,5,6, 0.5),
-        (3,4,7, np.sqrt(3)/2.0),
-        (5,6,7, np.sqrt(3)/2.0)
+        (3,4,7, np.sqrt(3)/2.0), (5,6,7, np.sqrt(3)/2.0),
+        # (1,5,6) i.e. 0-based (0,4,5) is already implied by antisymmetry via the above;
+        # add explicitly if you want to be maximally explicit:
+        (0,4,5, 0.5),
     ]
 
-    # Fill ascending entries, then enforce full antisymmetry
-    for (i, j, k, val) in pos:
-        f[i, j, k] = val
+    for (i,j,k,val) in pos:
+        f[i,j,k] = val
 
-    # Total antisymmetry over all permutations
-    def sign_of_permutation(triple, perm):
-        a, b, c = triple
-        x, y, z = perm
-        s = 1
-        arr = [a, b, c]
-        if arr[0] != x:
-            j = arr.index(x); arr[0], arr[j] = arr[j], arr[0]; s *= -1
-        if arr[1] != y:
-            j = arr.index(y); arr[1], arr[j] = arr[j], arr[1]; s *= -1
-        return s
-
+    # enforce total antisymmetry over permutations of (i,j,k)
     from itertools import permutations
-    for (i, j, k, val) in pos:
-        base = (i, j, k)
-        for p in set(permutations(base, 3)):
-            f[p] = sign_of_permutation(base, p) * val
+    def parity(base, perm):
+        # parity by bubble-sort count
+        a,b,c = base
+        x,y,z = perm
+        arr = [a,b,c]
+        swaps = 0
+        if arr[0] != x:
+            j = arr.index(x); arr[0],arr[j] = arr[j],arr[0]; swaps += 1
+        if arr[1] != y:
+            j = arr.index(y); arr[1],arr[j] = arr[j],arr[1]; swaps += 1
+        return -1 if swaps % 2 else 1
 
+    for (i,j,k,val) in pos:
+        base = (i,j,k)
+        for p in set(permutations(base, 3)):
+            f[p] = parity(base, p) * val
     return f
 
+
+# Python code (comments in English; console/output in German)
+
+import numpy as np
+
+# ---------- SU(3) helpers: standard Gell-Mann set and d_{abc} ----------
+def _gellmann_matrices():
+    """Return the 8 standard Gell-Mann matrices λ_a with Tr(λ_a λ_b) = 2 δ_ab."""
+    λ1 = np.array([[0,1,0],[1,0,0],[0,0,0]], dtype=float)
+    λ2 = np.array([[0,-1j,0],[1j,0,0],[0,0,0]], dtype=complex)
+    λ3 = np.array([[1,0,0],[0,-1,0],[0,0,0]], dtype=float)
+    λ4 = np.array([[0,0,1],[0,0,0],[1,0,0]], dtype=float)
+    λ5 = np.array([[0,0,-1j],[0,0,0],[1j,0,0]], dtype=complex)
+    λ6 = np.array([[0,0,0],[0,0,1],[0,1,0]], dtype=float)
+    λ7 = np.array([[0,0,0],[0,0,-1j],[0,1j,0]], dtype=complex)
+    λ8 = (1/np.sqrt(3)) * np.array([[1,0,0],[0,1,0],[0,0,-2]], dtype=float)
+    mats = [λ1, λ2, λ3.astype(complex), λ4.astype(complex),
+            λ5, λ6.astype(complex), λ7, λ8.astype(complex)]
+    return mats
+
+def _su3_d_tensor():
+    """
+    Compute d_{abc} from definition:
+        d_{abc} = (1/4) Tr({λ_a, λ_b} λ_c), with Tr(λ_a λ_b)=2 δ_ab.
+    Returns an (8,8,8) real array.
+    """
+    λ = _gellmann_matrices()
+    d = np.zeros((8,8,8), dtype=float)
+    for a in range(8):
+        for b in range(8):
+            ab = λ[a] @ λ[b] + λ[b] @ λ[a]  # anticommutator
+            for c in range(8):
+                val = np.trace(ab @ λ[c]) / 4.0
+                d[a,b,c] = float(np.real_if_close(val))
+    return d
+
+# ---------- Field covariance builders on (Q,P) ----------
+def _field_covariance_qp(spec: dict | None = None, *, qp_comm: float = 1.0) -> np.ndarray:
+    """
+    Build 2x2 covariance for (Q,P).
+    Conventions: [Q,P] = i * qp_comm  -> vacuum variances = qp_comm/2.
+    Supported spec["type"]: 'vacuum'/'coherent', 'thermal', 'squeezed', 'sigma'.
+    """
+    if spec is None:
+        spec = {"type": "vacuum"}
+    t = str(spec.get("type", "vacuum")).lower()
+
+    if t in ("vacuum", "coherent"):
+        s = 0.5 * qp_comm
+        return np.array([[s, 0.0],[0.0, s]], dtype=float)
+
+    if t == "thermal":
+        n_th = float(spec.get("n_th", 0.0))
+        s = (n_th + 0.5) * qp_comm
+        return np.array([[s, 0.0],[0.0, s]], dtype=float)
+
+    if t == "squeezed":
+        r = float(spec.get("r", 0.0))     # squeeze parameter
+        phi = float(spec.get("phi", 0.0)) # angle
+        dq = 0.5 * qp_comm * np.exp(-2.0 * r)
+        dp = 0.5 * qp_comm * np.exp(+2.0 * r)
+        R = np.array([[np.cos(phi), -np.sin(phi)],
+                      [np.sin(phi),  np.cos(phi)]], dtype=float)
+        D = np.diag([dq, dp])
+        return R @ D @ R.T
+
+    if t == "sigma":
+        Σqp = np.array(spec["Sigma"], dtype=float)
+        return 0.5 * (Σqp + Σqp.T)
+
+    raise ValueError(f"Unknown field spec type: {t}")
+
+# ---------- Main builder: Σ(0) from singles in m-order ----------
+def build_initial_sigma_from_state(
+    m0_singles: np.ndarray,
+    *,
+    generator: str = "lambda",    # 'lambda' for λ_a, or 't' for t_a = λ_a/2
+    qp_comm: float = 1.0,         # [Q,P] = i * qp_comm
+    field_spec: dict | None = None,
+    cross_atom_field: np.ndarray | None = None
+) -> np.ndarray:
+    """
+    Build Σ(0) for m-order = [x1..x8, Q, P] using exact SU(3) identities.
+
+    Parameters
+    ----------
+    m0_singles : array_like, shape (10,)
+        [<λ1>,...,<λ8>, <Q>, <P>] if generator='lambda';
+        If generator='t', pass [<t1>,...,<t8>, <Q>, <P>] with t_a=λ_a/2.
+    generator : {'lambda','t'}
+        Normalization of your atomic expectation values.
+    qp_comm : float
+        Canonical commutator factor: [Q,P] = i * qp_comm.
+    field_spec : dict or None
+        Covariance on (Q,P). See _field_covariance_qp().
+    cross_atom_field : array_like or None
+        Optional 8x2 cross-covariances between atomic (1..8) and (Q,P). Default None->zeros.
+
+    Returns
+    -------
+    Σ0 : (10,10) ndarray (float, symmetric)
+    """
+    m0 = np.asarray(m0_singles, dtype=float)
+    if m0.shape[0] != 10:
+        raise ValueError("m0_singles must have length 10: [x1..x8, Q, P].")
+
+    x = m0[:8]  # atomic means
+    Σ_qp = _field_covariance_qp(field_spec, qp_comm=qp_comm)  # 2x2
+
+    d = _su3_d_tensor()  # 8x8x8
+    if generator.lower() == "lambda":
+        # Identity: λ_a λ_b = (2/3) δ_ab I + (d_{abc} + i f_{abc}) λ_c
+        # -> 1/2 <{λ_a,λ_b}> = (2/3) δ_ab + sum_c d_{abc} <λ_c>
+        base = (2.0/3.0) * np.eye(8)
+        add  = np.tensordot(d, x, axes=([2],[0]))   # (8,8)
+        Σ_atom = base + add - np.outer(x, x)
+    elif generator.lower() == "t":
+        # For t_a = λ_a/2:
+        # -> 1/2 <{t_a,t_b}> = (1/6) δ_ab + (1/2) sum_c d_{abc} <t_c>
+        base = (1.0/6.0) * np.eye(8)
+        add  = 0.5 * np.tensordot(d, x, axes=([2],[0]))
+        Σ_atom = base + add - np.outer(x, x)
+    else:
+        raise ValueError("generator must be 'lambda' or 't'.")
+
+    Σ0 = np.zeros((10,10), dtype=float)
+    Σ0[:8,:8] = 0.5 * (Σ_atom + Σ_atom.T)
+
+    # Cross atom-field (8x2)
+    if cross_atom_field is not None:
+        CAF = np.asarray(cross_atom_field, dtype=float)
+        if CAF.shape != (8,2):
+            raise ValueError("cross_atom_field must have shape (8,2).")
+        Σ0[:8, 8:10] = CAF
+        Σ0[8:10, :8] = CAF.T
+
+    # Field block
+    Σ0[8:10, 8:10] = Σ_qp
+
+    # Final symmetry enforcement
+    Σ0 = 0.5 * (Σ0 + Σ0.T)
+    return Σ0
+
+# ---------- Matrix check: Hermitian & PSD ----------
+def check_hermitian_psd(M, *, herm_tol=1e-10, psd_tol=1e-12, return_eigs=False, verbose=True):
+    """
+    Check if matrix M is Hermitian and Positive Semi-Definite (PSD).
+
+    - Hermiticity via max|M - M^†|.
+    - PSD via min eigenvalue of the Hermitian part H=(M+M^†)/2.
+
+    Returns dict with flags and diagnostics; optionally eigenvalues.
+    """
+    A = np.array(M, dtype=complex, copy=False)
+
+    antiherm = A - A.conjugate().T
+    max_anti = float(np.max(np.abs(antiherm)))
+    is_herm = (max_anti <= herm_tol)
+
+    H = 0.5 * (A + A.conjugate().T)
+    H = 0.5 * (H + H.conjugate().T)  # enforce exact Hermitian symmetry
+    evals = np.linalg.eigvalsh(H)
+    min_eig = float(np.min(evals.real))
+    is_psd = (min_eig >= -psd_tol)
+
+    if verbose:
+        print("=== Matrix-Check: Hermitesch & PSD ===")
+        print(f"max|M - M^†| = {max_anti:.3e}  ⇒ Hermitesch: {is_herm} (Toleranz {herm_tol:g})")
+        print(f"min λ(H)     = {min_eig:.3e}  ⇒ PSD:        {is_psd} (Toleranz {psd_tol:g})")
+
+    out = {
+        "is_hermitian": is_herm,
+        "is_psd": is_psd,
+        "max_antiherm_norm": max_anti,
+        "min_eig": min_eig,
+    }
+    if return_eigs:
+        out["eigvals"] = evals
+    return out
 
 def symplectic_from_singles(singles: np.ndarray, *, scale_su3: float = 2.0) -> np.ndarray:
     """
@@ -466,10 +645,6 @@ import matplotlib.pyplot as plt
 
 # ====================== 2) Σ so plotten wie s(t) ======================
 
-def reconstruct_sigma_series(sol, idx, take_real=True):
-    """(Stub here if not already in scope) – you said you have this already."""
-    raise RuntimeError("Nutze deine bestehende reconstruct_sigma_series(sol, idx).")
-
 def plot_sigma_entries_over_time(sol, idx, entries=((0,0),(1,1),(2,2),(8,8),(9,9)) , take_real=True):
     """
     Plot selected Σ_ij(t) entries vs time (same style as s-plot).
@@ -685,6 +860,7 @@ def check_psd_sigma_and_uncertainty(sol, idx, *, tol=1e-10, take_real_sigma=True
         plt.grid(True, alpha=0.3)
         plt.legend()
         plt.tight_layout()
+        plt.show()
         print("Plots der minimalen Eigenwerte erstellt.")
 
     return {
@@ -726,49 +902,9 @@ def build_C_full(f_tensor, boson_factor=1.0):
 
     return C
 
-def su3_f_tensor() -> np.ndarray:
-    """
-    Return f[a,b,c] for SU(3) in the standard Gell-Mann basis (a,b,c = 0..7 for λ1..λ8).
-    Only ascending triples are set positive; all others follow by total antisymmetry.
-    """
-    f = np.zeros((8, 8, 8), dtype=float)
 
-    # Positive base (ascending index triples; 1-based in literature -> 0-based here):
-    pos = [
-        (0,1,2, 1.0),                        # f_{123} = 1
-        (0,3,6, 0.5), (1,3,5, 0.5), (1,4,6, 0.5),
-        (2,3,4, 0.5), (2,5,6, 0.5), (3,4,7, np.sqrt(3)/2.0), (5,6,7, np.sqrt(3)/2.0)
-    ]
-    # The line above uses the conventional ascending positives:
-    # (1,4,7), (2,4,6), (2,5,7), (3,4,5), (1,5,6), (3,6,7), (4,5,8), (6,7,8)
 
-    # Fill ascending entries
-    for (i,j,k,val) in pos:
-        f[i,j,k] = val
 
-    # Enforce total antisymmetry over all permutations
-    # If (i,j,k) has value v for sorted(i,j,k), then any permutation gets sign = parity(perm) * v.
-    def sign_of_permutation(triple, perm):
-        # parity via number of swaps to reach perm from triple
-        a,b,c = triple
-        x,y,z = perm
-        s = 1
-        arr = [a,b,c]
-        if arr[0] != x:
-            j = arr.index(x); arr[0],arr[j] = arr[j],arr[0]; s *= -1
-        if arr[1] != y:
-            j = arr.index(y); arr[1],arr[j] = arr[j],arr[1]; s *= -1
-        # now arr[2] == z automatically
-        return s
-
-    for (i,j,k,val) in pos:
-        base = (i,j,k)
-        from itertools import permutations
-        for p in set(permutations(base, 3)):
-            sgn = sign_of_permutation(base, p)
-            f[p] = sgn * val
-
-    return f
 def _build_nameval_from_numeric_params(numeric_params: dict) -> dict[str, float]:
     """Make a name->float map from a dict keyed by SymPy Symbols (or strings)."""
     nameval: dict[str, float] = {}
@@ -1076,29 +1212,232 @@ def plot_sigma_and_check_psd(
     return results
 
 
+def gellmann_matrices():
+    """Return the 8 standard Gell-Mann matrices λ_a with Tr(λ_a λ_b) = 2 δ_ab."""
+    l1 = np.array([[0,1,0],[1,0,0],[0,0,0]], dtype=float)
+    l2 = np.array([[0,0,-1],[0,0,0],[ -1,0,0]], dtype=float)  # will set sign via i later
+    l2 = np.array([[0,-1,0],[1,0,0],[0,0,0]], dtype=float) * 0  # placeholder to avoid confusion
+    # Build explicitly to avoid mistakes (use standard definitions)
+    λ1 = np.array([[0,1,0],[1,0,0],[0,0,0]], dtype=float)
+    λ2 = np.array([[0,-1,0],[1,0,0],[0,0,0]], dtype=float) * 0  # not used; we construct via complex, then take real part
+    λ2 = np.array([[0,-1j,0],[1j,0,0],[0,0,0]], dtype=complex)
+    λ3 = np.array([[1,0,0],[0,-1,0],[0,0,0]], dtype=float)
+    λ4 = np.array([[0,0,1],[0,0,0],[1,0,0]], dtype=float)
+    λ5 = np.array([[0,0,-1j],[0,0,0],[1j,0,0]], dtype=complex)
+    λ6 = np.array([[0,0,0],[0,0,1],[0,1,0]], dtype=float)
+    λ7 = np.array([[0,0,0],[0,0,-1j],[0,1j,0]], dtype=complex)
+    λ8 = (1/np.sqrt(3)) * np.array([[1,0,0],[0,1,0],[0,0,-2]], dtype=float)
+    # Ensure dtype=complex for all, to handle λ2, λ5, λ7 correctly
+    mats = [λ1, λ2, λ3.astype(complex), λ4.astype(complex), λ5, λ6.astype(complex), λ7, λ8.astype(complex)]
+    return mats
+
+def su3_d_tensor():
+    """
+    Compute d_{abc} via definition:
+        d_{abc} = (1/4) Tr({λ_a, λ_b} λ_c)   with Tr(λ_a λ_b)=2 δ_ab
+    Returns d with shape (8,8,8), dtype=float (purely real).
+    """
+    λ = gellmann_matrices()
+    d = np.zeros((8,8,8), dtype=float)
+    for a in range(8):
+        for b in range(8):
+            # anticommutator
+            ab = λ[a] @ λ[b] + λ[b] @ λ[a]
+            for c in range(8):
+                val = np.trace(ab @ λ[c]) / 4.0
+                # val should be real; discard tiny imaginary noise
+                d[a,b,c] = float(np.real_if_close(val))
+    return d
 
 
 
+
+
+
+
+# ========================== ADD/REPLACE: robust initial Σ and s ==========================
+import numpy as np
+
+def _su3_structure_constants_from_lambdas(lams):
+    """Compute f_{abc} and d_{abc} via trace identities for given generators lams."""
+    f = np.zeros((8,8,8), dtype=float)
+    d = np.zeros((8,8,8), dtype=float)
+    for a in range(8):
+        for b in range(8):
+            comm = lams[a] @ lams[b] - lams[b] @ lams[a]
+            anti = lams[a] @ lams[b] + lams[b] @ lams[a]
+            for c in range(8):
+                f[a,b,c] = np.real(np.trace(comm @ lams[c])/(4j))
+                d[a,b,c] = np.real(np.trace(anti @ lams[c])/4.0)
+    return f, d
+
+def _gellmann_standard():
+    """Return standard Gell-Mann matrices λ_a with Tr(λa λb)=2 δab."""
+    l = []
+    l.append(np.array([[0,1,0],[1,0,0],[0,0,0]], dtype=complex))                      # λ1
+    l.append(np.array([[0,-1j,0],[1j,0,0],[0,0,0]], dtype=complex))                   # λ2
+    l.append(np.array([[1,0,0],[0,-1,0],[0,0,0]], dtype=complex))                     # λ3
+    l.append(np.array([[0,0,1],[0,0,0],[1,0,0]], dtype=complex))                      # λ4
+    l.append(np.array([[0,0,-1j],[0,0,0],[1j,0,0]], dtype=complex))                   # λ5
+    l.append(np.array([[0,0,0],[0,0,1],[0,1,0]], dtype=complex))                      # λ6
+    l.append(np.array([[0,0,0],[0,0,-1j],[0,1j,0]], dtype=complex))                   # λ7
+    l.append((1/np.sqrt(3))*np.array([[1,0,0],[0,1,0],[0,0,-2]], dtype=complex))      # λ8
+    return l
+
+def sigma_atom_from_m(m8, d_tensor, *, generator='lambda'):
+    """
+    Atomic block Σ^{(λ)}(0) from singles m (length 8).
+    For λ:  Σ_ab = 2/3 δ_ab + d_{abc} m_c - m_a m_b
+    For t=λ/2: Σ_ab = 1/6 δ_ab + 1/2 d_{abc} m_c - m_a m_b
+    """
+    m = np.asarray(m8, dtype=float)
+    if generator.lower() == 'lambda':
+        base = (2.0/3.0) * np.eye(8)
+        add  = np.tensordot(d_tensor, m, axes=(2,0))
+    else:  # 't'
+        base = (1.0/6.0) * np.eye(8)
+        add  = 0.5 * np.tensordot(d_tensor, m, axes=(2,0))
+    Sigma = base + add - np.outer(m, m)
+    return 0.5*(Sigma+Sigma.T)
+
+def sigma_qp_from_spec(*, qp_comm=1.0, kind='coherent', n_th=0.0, r=0.0, phi=0.0, Sigma=None):
+    """
+    Build 2x2 field covariance:
+      coherent/vacuum: diag(qp_comm/2, qp_comm/2)
+      thermal:        (n_th+1/2)*qp_comm * I
+      squeezed:       rotate(diag(e^{-2r}, e^{+2r})) scaled by qp_comm/2
+      Sigma:          use provided 2x2 matrix
+    """
+    if kind in ('coherent','vacuum'):
+        s = 0.5*qp_comm
+        return np.array([[s,0.0],[0.0,s]], dtype=float)
+    if kind=='thermal':
+        s = (n_th+0.5)*qp_comm
+        return np.array([[s,0.0],[0.0,s]], dtype=float)
+    if kind=='squeezed':
+        dq = 0.5*qp_comm*np.exp(-2.0*r)
+        dp = 0.5*qp_comm*np.exp(+2.0*r)
+        R  = np.array([[np.cos(phi),-np.sin(phi)],[np.sin(phi),np.cos(phi)]], dtype=float)
+        return R @ np.diag([dq,dp]) @ R.T
+    if kind=='Sigma' and Sigma is not None:
+        M = np.array(Sigma, dtype=float);  return 0.5*(M+M.T)
+    raise ValueError("Unknown field kind.")
+
+def build_initial_sigma_and_s_from_rho_y0(
+    y0_ket: np.ndarray,
+    *,
+    generator='lambda',
+    qp_comm=1.0,
+    field_kind='coherent',
+    field_kwargs=None
+):
+    """
+    Full pipeline from rho-basis initial state to Σ(0) and s(0).
+    y0_ket = [da, da†, rho00, rho01, rho10, rho11, rho22, rho21, rho12, rho20, rho02]
+    """
+    # 1) Map rho-basis -> x=[Q,P,x1..x8] using your helper
+    x0 = convert_state(y0_ket)  # complex array
+
+    # 2) Singles in m-order [x1..x8, Q, P]
+    m0_singles = np.array([*x0[2:10], x0[0], x0[1]], dtype=complex)
+    m8 = np.real(m0_singles[:8])
+
+    # 3) Atomic Σ via d-tensor (computed from exact λs)
+    lams = _gellmann_standard()
+    _f, d = _su3_structure_constants_from_lambdas(lams)
+    Sigma_atom = sigma_atom_from_m(m8, d, generator=generator)
+
+    # 4) Field Σ
+    field_kwargs = field_kwargs or {}
+    Sigma_qp = sigma_qp_from_spec(qp_comm=qp_comm, kind=field_kind, **field_kwargs)
+
+    # 5) Assemble Σ(0)
+    Sigma0 = np.zeros((10,10), dtype=float)
+    Sigma0[:8,:8] = Sigma_atom
+    Sigma0[8:,8:] = Sigma_qp
+
+    # 6) s(0) from singles (your su3 f-tensor + canonical QP)
+    #    We reuse your robust builder so normalization is consistent with your code.
+    s0 = symplectic_from_singles(np.real(m0_singles), scale_su3=2.0)  # uses su3_f_tensor() internally
+
+    return m0_singles, Sigma0, s0
+
+# ========================== MAIN DRIVER (ρ-basis → solve → checks) ==========================
+def run_qf_from_rho_initial(
+    y0_ket: np.ndarray,
+    t_span=(0.0, 50.0),
+    nt=2001,
+    *,
+    params_singles: dict,
+    qp_comm=1.0,
+    field_kind='coherent',
+    field_kwargs=None,
+    ode_rtol=1e-8,
+    ode_atol=1e-8
+):
+    """
+    End-to-end: rho-initial -> m-order singles/pairs ICs -> integrate -> PSD checks each step.
+    """
+    # (A) Build Σ(0), s(0) and singles m(0)
+    m0_singles, Sigma0, s0 = build_initial_sigma_and_s_from_rho_y0(
+        y0_ket, generator='lambda', qp_comm=qp_comm,
+        field_kind=field_kind, field_kwargs=field_kwargs
+    )
+
+    # (B) Prepare RHS for pairs system (Σ̇ = ... from your symbolic Sigma_dt)
+    #     (we assume you've already built Sigma_dt and the idx/rhs func earlier)
+    # -> if not yet available, do it here (using your existing helpers)
+    #     idx, rhs_pairs_func = prepare_system_for_solve_ivp(mP_syms, Sigma_dt, ...)
+    # (we rely on idx, rhs_pairs_func existing in outer scope)
+
+    # (C) Pack initial state: singles + upper-triangle(Σ0)
+    m0_pairs = pack_upper_triangle_from_covariance(Sigma0, idx["pairs_order"])
+    y0 = np.concatenate([m0_singles, m0_pairs])
+
+    # (D) Combined RHS (singles via your rhs_gellmann_qp_from_x, pairs via lambdified Σ̇)
+    fun = make_combined_rhs(idx, rhs_pairs_func, params_dict=params_singles, extra_param_values_tuple=())
+
+    # (E) Integrate
+    t_eval = np.linspace(t_span[0], t_span[1], nt)
+    sol = solve_ivp(fun, t_span, y0, t_eval=t_eval, method="RK45", rtol=ode_rtol, atol=ode_atol)
+
+    # (F) Reconstruct Σ(t) and compute s(t) at each step; check Robertson–Schrödinger
+    results = check_psd_sigma_and_uncertainty(
+        sol, idx, tol=1e-10, take_real_sigma=True, scale_su3=2.0, make_plots=True
+    )
+    return sol, results
+
+
+
+
+
+def is_pos_def(x):
+    return np.all(np.linalg.eigvals(x) > 0)
 
 if __name__ == "__main__":
     print("Baue kombiniertes Singles+Kovarianz-System …")
     regular_plots = True
 
     # (1) Symbols, sizes
-    t_span = (0.0, 50.0)
+    t_span = (0.0, 120.0)
     t_eval = np.linspace(*t_span, 2001)
     n = 10
     mP_syms = sp.symbols('m1:11')  # m1..m8 = x1..x8, m9=Q, m10=P
 
-    g0, Delta1, V, gamma, Omega, kappa, eta, Delta2 = sp.symbols("g0 Delta1 V gamma Omega kappa eta Delta2")
+    g0, Delta1, Delta2, V, Gamma, Omega, kappa, eta = sp.symbols("g0 Delta1 Delta2 V Gamma Omega kappa eta")
     Omega_val = 8
     Gamma_val = 2
     V_val = -0.5 * ((Omega_val / 4)**2 + 1)
-    numeric_params = { g0: 1, Delta1: 1, Delta2: 1, V: V_val, gamma: Gamma_val, Omega: Omega_val, kappa: 1, eta: 1 }
+    numeric_params = { g0: 1, Delta1: 1, Delta2: 1, V: V_val, Gamma: Gamma_val, Omega: Omega_val, kappa: 1, eta: 1 }
 
     # Pull matrices from your covar module (numeric + symbolic, if needed later)
     G, sDs, Z, P, Q,sE, Z_prime, W, Sigma_dt, Sigma, K = covar.get_important_matricies(numeric_params)
-    G_sym, sDs_sym, Z_sym, P_sym, Q_sym,sE_sym, Z_prime_sym, W_sym, Sigma_dt_sym, Sigma_sym, K_sym = covar.get_important_matricies_symbol()
+    #G_sym, sDs_sym, Z_sym, P_sym, Q_sym,sE_sym, Z_prime_sym, W_sym, Sigma_dt_sym, Sigma_sym, K_sym = covar.get_important_matricies_symbol()
+    
+    #sp.pprint(sp.Matrix(G_sym))
+    #sp.pprint(sp.Matrix(Q_sym))
+    #sp.pprint(sp.Matrix(Z_sym))
+    #sp.pprint(sp.Matrix(G_sym))
 
     #sp.pprint(sDs_sym)
     # # Example usage:
@@ -1131,6 +1470,12 @@ if __name__ == "__main__":
 
     # (2) Prepare pair system
     Sigma_dt_clean = Sigma_dt
+    sp.simplify(Sigma_dt_clean)
+
+
+
+
+
     idx, rhs_pairs_func = prepare_system_for_solve_ivp(
         mP_syms=mP_syms,
         Sigma_dt=Sigma_dt_clean,
@@ -1177,42 +1522,84 @@ if __name__ == "__main__":
     # 11-d ket IC -> x-space -> m-order [x1..x8, Q, P]
     #y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
     #[da_dt, da_dagger_dt, d00, d01, d10, d11, d22, d21, d12, d20, d02]
-    y0_ket = np.array([0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j])
-    x0 = convert_state(y0_ket)  # [Q,P,x1..x8]
-    m0_singles = np.array([*x0[2:10], x0[0], x0[1]], dtype=complex)
+  # ===== Example: rho00=0.8, rho11=0.0, rho22=0.2; displaced coherent cavity (Q,P) means =====
+    # y0_ket = [da, da†, ρ00, ρ01, ρ10, ρ11, ρ22, ρ21, ρ12, ρ20, ρ02]
+    y0_ket = np.array([
+        0+0j, 0+0j,          # da, da† (not used for Σ(0); convert_state handles mapping)
+        1+0j, 0+0j, 0+0j,  # ρ00, ρ01, ρ10
+        0.0+0j,              # ρ11
+        0.0+0j, 0+0j, 0+0j,  # ρ22, ρ21, ρ12
+        0+0j, 0+0j           # ρ20, ρ02
+    ])
 
-    # Covariance IC Σ(0)
-    Σ0 = initial_covariance_from_state(m0_singles, atom_scale=1.0, boson_scale=1.0)
-    m0_pairs = pack_upper_triangle_from_covariance(Σ0, idx["pairs_order"])
+    # Singles-Parameter für dein rhs (passe an dein System an)
+    params_singles = dict(g0=1.0, kappa=1.0, gamma=1.0, Gamma=2.0,
+                        Omega=8.0, delta1=1.0, delta2=1.0, eta=1.0, V=-0.5*((8/4)**2+1))
 
-    y0 = np.concatenate([m0_singles, m0_pairs])
+    # Feld-Varianzen (koherent/vakuum → Var(Q)=Var(P)=qp_comm/2), hier zusätzlich Mittelwerte in convert_state
+    sol, res = run_qf_from_rho_initial(
+        y0_ket,
+        t_span=(0.0, 120.0),
+        nt=2001,
+        params_singles=params_singles,
+        qp_comm=1.0,                 # [Q,P] = i
+        field_kind='coherent',       # or 'thermal', 'squeezed', 'Sigma'
+        field_kwargs=None,
+        ode_rtol=1e-8, ode_atol=1e-8
+    )
 
-    # (6) Smoke-test: rhs_pairs_func must accept a flat state -> returns correct length
-    y_len = len(idx["state_symbols"])
-    try:
-        _ = rhs_pairs_func(*([0.0] * y_len))
-        print("Lambdify-Test OK – Länge z-Ausgabe =", len(_))
-    except Exception as e:
-        print("Lambdify-Test FEHLER:", repr(e))
 
-    # (7) Numerical RHS check at t=0 (optional)
-    print("\n===== Numerischer RHS-Check bei t=0 =====")
-    dy_singles0 = singles_rhs_from_m_order(0.0, y0[idx["singles_slice"]], params)
-    dy_pairs0   = np.asarray(rhs_pairs_func(*y0.tolist()))
-    print("Singles @0:", dy_singles0)
 
-    # (8) Integrate
-    sol = solve_ivp(fun, t_span, y0, t_eval=t_eval, method="RK45", rtol=1e-8, atol=1e-8)
 
-    plot_populations_and_sigma(sol, idx, only_upper_sigma=False)
-    res = plot_sigma_and_check_psd(
-    sol, idx,
-    take_real=True,
-    tol=1e-10,
-    also_uncertainty=True,
-    entries=((0,0),(1,1),(2,2),(8,8),(9,9)),
-    heatmap_times=(sol.t[0], sol.t[len(sol.t)//2], None),  # start, mid, final
-    save_prefix=None,  # or e.g. "out/sigma_psd"
-    show_plots=True
-)
-    sp.pprint(P_sym)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#     # Covariance IC Σ(0)
+#     Σ0 = initial_covariance_from_state(m0_singles, atom_scale=1.0, boson_scale=1.0)
+#     m0_pairs = pack_upper_triangle_from_covariance(Σ0, idx["pairs_order"])
+
+#     y0 = np.concatenate([m0_singles, m0_pairs])
+
+#     # (6) Smoke-test: rhs_pairs_func must accept a flat state -> returns correct length
+#     y_len = len(idx["state_symbols"])
+#     try:
+#         _ = rhs_pairs_func(*([0.0] * y_len))
+#         print("Lambdify-Test OK – Länge z-Ausgabe =", len(_))
+#     except Exception as e:
+#         print("Lambdify-Test FEHLER:", repr(e))
+
+#     # (7) Numerical RHS check at t=0 (optional)
+#     print("\n===== Numerischer RHS-Check bei t=0 =====")
+#     dy_singles0 = singles_rhs_from_m_order(0.0, y0[idx["singles_slice"]], params)
+#     dy_pairs0   = np.asarray(rhs_pairs_func(*y0.tolist()))
+#     print("Singles @0:", dy_singles0)
+
+#     # (8) Integrate
+#     sol = solve_ivp(fun, t_span, y0, t_eval=t_eval, method="RK45", rtol=1e-8, atol=1e-8)
+
+#     plot_populations_and_sigma(sol, idx, only_upper_sigma=False)
+#     res = plot_sigma_and_check_psd(
+#     sol, idx,
+#     take_real=True,
+#     tol=1e-10,
+#     also_uncertainty=True,
+#     entries=((0,0),(1,1),(2,2),(8,8),(9,9)),
+#     heatmap_times=(sol.t[0], sol.t[len(sol.t)//2], None),  # start, mid, final
+#     save_prefix=None,  # or e.g. "out/sigma_psd"
+#     show_plots=True
+# )
+    
