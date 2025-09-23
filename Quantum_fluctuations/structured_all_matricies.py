@@ -319,8 +319,8 @@ def run_all():
         h[(nu, mu)] = val
 
     # Light–matter: g0 (m1*q + m2*p)  -> note: plus for m2*p with your q,p def
-    set_h(1, 9,  g0/np.sqrt(2))
-    set_h(2, 10, g0/np.sqrt(2))
+    set_h(1, 9,  g0/2)
+    set_h(2, 10, g0/2)
 
     # V-term quadratic piece: (V/3) m8^2
     set_h(8, 8, V_const/3)
@@ -362,11 +362,12 @@ def run_all():
         # (3) Bosonic rows from canonical equations:
         #     qdot = + g0 * m2 + 2N*eta     -> P[9,2]  = + g0  (inhom. 2N*eta not in P)
         #     pdot = - g0 * m1              -> P[10,1] = - g0
-        P[9-1,  2-1] +=  g0/np.sqrt(2)
-        P[10-1, 1-1] += -g0/np.sqrt(2)
+        P[9-1,  2-1] +=  g0
+        P[10-1, 1-1] += -g0
 
         return sp.simplify(P)
 
+    P_sym = build_P_sym()
 
     # --- Numeric wrapper so your old code can use a ready-to-evaluate P ---
     # def P_numeric(numeric_params: dict, m_vec: np.ndarray) -> np.ndarray:
@@ -425,139 +426,7 @@ def run_all():
                 Q[k-1,alpha-1] = sp.simplify(tot)
         return (Gamma/4)*Q
 
-
-
-    # def compute_Q_with_deltas(
-    #     Gamma,
-    #     PHYS_DIM,
-    #     f_sym,
-    #     d_arr,
-    #     *,
-    #     id_index=None,   # 1-based index of the identity operator in your basis; use None if no identity present
-    #     sqrtN=1          # set to sqrt(N) if you want the overall 1/sqrt(N) factor; use 1 to omit it
-    # ):
-    #     """
-    #     Build the Q-matrix implementing the dissipator D[F_alpha] in your operator basis.
-
-    #     The formula used corresponds to:
-    #         D[F_α] = (Γ / (4 √N)) sum_{c,k} [
-    #             + i f^{α1c} ( (2/3) δ_{1c} I + (d_{1ck} + i f_{1ck}) λ_k )
-    #             +   f^{α1c} ( (2/3) δ_{2c} I + (d_{2ck} + i f_{2ck}) λ_k )
-    #             -   f^{α2c} ( (2/3) δ_{1c} I + (d_{1ck} + i f_{1ck}) λ_k )
-    #             + i f^{α2c} ( (2/3) δ_{2c} I + (d_{2ck} + i f_{2ck}) λ_k )
-    #             + i f^{1αc} ( (2/3) δ_{c1} I + (d_{c1k} + i f_{c1k}) λ_k )
-    #             -   f^{1αc} ( (2/3) δ_{c2} I + (d_{c2k} + i f_{c2k}) λ_k )
-    #             +   f^{2αc} ( (2/3) δ_{c1} I + (d_{c1k} + i f_{c1k}) λ_k )
-    #             + i f^{2αc} ( (2/3) δ_{c2} I + (d_{c2k} + i f_{c2k}) λ_k )
-    #         ]
-
-    #     Basis conventions:
-    #     - Indices α,k,c run from 1..PHYS_DIM for your chosen operator set.
-    #     - If `id_index` is None, the (2/3) δ ... * I parts are dropped (they live outside traceless SU(3)).
-    #     If `id_index` is an integer (1-based), the identity contributions are accumulated into the
-    #     corresponding row `id_index` of Q.
-
-    #     Parameters
-    #     ----------
-    #     Gamma : sympy.Symbol or number
-    #         Dissipation rate Γ.
-    #     PHYS_DIM : int
-    #         Size of your operator basis.
-    #     f_sym : callable
-    #         Function f_sym(a,b,c) returning f^{abc}. Assumed antisymmetric as usual.
-    #     d_arr : array-like
-    #         d_arr[a-1][b-1][c-1] = d^{abc} (0-based storage).
-    #     id_index : int or None, optional
-    #         1-based position of the identity operator in your basis; None if not present.
-    #     sqrtN : number, optional
-    #         Use sqrtN = sp.sqrt(N) (or numeric value) to include the overall 1/√N factor.
-
-    #     Returns
-    #     -------
-    #     Q : sympy.Matrix (PHYS_DIM x PHYS_DIM)
-    #         The superoperator block Q with all delta contributions included as applicable.
-    #     """
-    #     I = sp.I
-    #     delta = sp.KroneckerDelta
-
-    #     Q = sp.zeros(PHYS_DIM)
-
-    #     # Helper to add identity-channel contributions if identity exists in basis
-    #     def add_identity_contrib(alpha, c, coeff):
-    #         """
-    #         Adds (2/3) * delta * coeff to the identity row (id_index), column alpha.
-    #         'coeff' already contains the appropriate i * f^{..} or +/- f^{..} prefactor.
-    #         """
-    #         if id_index is None:
-    #             return  # no identity in basis -> drop contribution (correct in traceless SU(3))
-    #         # Accumulate into the identity operator's row; column is α (1-based to 0-based)
-    #         Q[id_index - 1, alpha - 1] += (sp.Rational(2, 3)) * coeff
-
-    #     # Main loops: α (column), k (row), c (summation)
-    #     for alpha in range(1, PHYS_DIM - 1):
-    #         for k in range(1, PHYS_DIM - 1):
-    #             tot_lambda = 0  # contributions multiplying λ_k
-    #             for c in range(1, PHYS_DIM - 1):
-    #                 # f and d tensors (note: d_arr is 0-based in storage)
-    #                 f_a1c = f_sym(alpha, 1, c); f_a2c = f_sym(alpha, 2, c)
-    #                 f_1ac = f_sym(1, alpha, c); f_2ac = f_sym(2, alpha, c)
-
-    #                 d_1ck = d_arr[0][c-1][k-1]; f_1ck = f_sym(1, c, k)
-    #                 d_2ck = d_arr[1][c-1][k-1]; f_2ck = f_sym(2, c, k)
-    #                 d_c1k = d_arr[c-1][0][k-1]; f_c1k = f_sym(c, 1, k)
-    #                 d_c2k = d_arr[c-1][1][k-1]; f_c2k = f_sym(c, 2, k)
-
-    #                 # --- λ_k parts (exactly your original t1..t8 structure) ---
-    #                 t1 = I * f_a1c * (d_1ck + I * f_1ck)
-    #                 t2 =       f_a1c * (d_2ck + I * f_2ck)
-    #                 t3 = -     f_a2c * (d_1ck + I * f_1ck)
-    #                 t4 = I *   f_a2c * (d_2ck + I * f_2ck)
-    #                 t5 = I *   f_1ac * (d_c1k + I * f_c1k)
-    #                 t6 = -     f_1ac * (d_c2k + I * f_c2k)
-    #                 t7 =       f_2ac * (d_c1k + I * f_c1k)
-    #                 t8 = I *   f_2ac * (d_c2k + I * f_c2k)
-
-    #                 tot_lambda += (t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8)
-
-    #                 # --- Identity parts: (2/3) δ * I ---
-    #                 # They do NOT depend on k, so we add them once per (alpha,c) into the identity row.
-    #                 # Group them with the same prefactors as above, but without the (d+if) pieces.
-    #                 # Terms:
-    #                 #   i f^{α1c} * (2/3) δ_{1c} I
-    #                 #   + f^{α1c} * (2/3) δ_{2c} I
-    #                 #   - f^{α2c} * (2/3) δ_{1c} I
-    #                 #   + i f^{α2c} * (2/3) δ_{2c} I
-    #                 #   + i f^{1αc} * (2/3) δ_{c1} I
-    #                 #   -   f^{1αc} * (2/3) δ_{c2} I
-    #                 #   +   f^{2αc} * (2/3) δ_{c1} I
-    #                 #   + i f^{2αc} * (2/3) δ_{c2} I
-
-    #                 # careful: add only once per (alpha, c); do not replicate over k
-    #                 if k == 1:  # arbitrary guard to run once per c; you can also move outside the k-loop
-    #                     add_identity_contrib(alpha, c,  I * f_a1c * delta(1, c))
-    #                     add_identity_contrib(alpha, c,        f_a1c * delta(2, c))
-    #                     add_identity_contrib(alpha, c, -      f_a2c * delta(1, c))
-    #                     add_identity_contrib(alpha, c,  I *   f_a2c * delta(2, c))
-
-    #                     add_identity_contrib(alpha, c,  I *   f_1ac * delta(c, 1))
-    #                     add_identity_contrib(alpha, c, -      f_1ac * delta(c, 2))
-    #                     add_identity_contrib(alpha, c,        f_2ac * delta(c, 1))
-    #                     add_identity_contrib(alpha, c,  I *   f_2ac * delta(c, 2))
-
-    #             # Assign λ_k contributions to Q (row k, column α)
-    #             Q[k-1, alpha-1] += sp.simplify(tot_lambda)
-
-    #     # Overall prefactor Γ/(4√N)
-    #     pref = Gamma / (4 * sqrtN)
-    #     return sp.simplify(pref * Q)
-
-
-
-
-
-
-    #Q = compute_Q_with_deltas(Gamma, PHYS_DIM=10, f_sym=f_sym, d_arr=d_arr, id_index=None, sqrtN=1)  #compute_Q()
-    Q=compute_Q()
+    Q = compute_Q()
 
     # -----------------------------
     # Matrix G = P + sE + Q
@@ -605,11 +474,11 @@ def run_all():
         return Zp
 
 
-    G = P + sE + Q
+    G = P + sE + Q#P + sE + Q
 
     Z_prime=compute_Z_prime_new()
     Z=sp.simplify((Z_prime+Z_prime.T)/2)
-    W=Z-sDs
+    W=Z+sDs
     print("done computing Z, Z', sDs, Q, G ...")
     return G,sDs,Z,P,Q,sE,Z_prime,W
 

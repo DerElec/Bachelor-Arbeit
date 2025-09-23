@@ -113,18 +113,54 @@ def build_symplectic_matrix_ts(sol):
         
     return matrix_timeseries
 
-def get_and_check_matrices_at_time(t_target, sol):
+# Fügen Sie diese Funktion zu den anderen Hilfsfunktionen am Anfang hinzu
+def check_symplectic_properties(s_matrix_np: np.ndarray, n: int, tol: float = 1e-9):
     """
-    Findet den nächstgelegenen Zeitpunkt, prüft ob Sigma PSD ist,
-    gibt die Matrizen aus und gibt sie zurück.
+    Überprüft eine gegebene Matrix auf ihre symplektischen Eigenschaften.
 
     Args:
-        t_target (float): Der gewünschte Zeitpunkt.
-        sol: Das von solve_ivp zurückgegebene Lösungsobjekt.
+        s_matrix_np (np.ndarray): Die zu prüfende (2n x 2n) Matrix.
+        n (int): Die halbe Dimension der Matrix.
+        tol (float): Toleranz für die numerischen Vergleiche.
+    """
+    dim = 2 * n
+    if s_matrix_np.shape != (dim, dim):
+        raise ValueError(f"Matrix muss die Dimension ({dim}, {dim}) haben.")
+
+    # 1. Determinanten-Check
+    det_s = np.linalg.det(s_matrix_np)
+    is_det_one = np.isclose(det_s, 1.0, atol=tol)
     
-    Returns:
-        tuple[sp.Matrix, sp.Matrix]: Ein Tupel mit der Kovarianzmatrix Sigma
-                                     und der symplektischen Matrix s als SymPy-Matrizen.
+    print("\n--- Symplektischer Check für Matrix s(t) ---")
+    print(f"Determinante von s(t): {det_s:.6f}")
+    print(f"Ist die Determinante ≈ 1? {'Ja' if is_det_one else 'Nein'}")
+
+    # 2. Symplektische Bedingung: S^T * J * S = J
+    # Erstelle die Standard-symplektische-Blockmatrix J
+    I_n = np.identity(n)
+    zero_n = np.zeros((n, n))
+    J = np.block([[zero_n, I_n], [-I_n, zero_n]])
+    
+    # Berechne die linke Seite der Gleichung
+    left_side = s_matrix_np.T @ J @ s_matrix_np
+    
+    # Prüfe, ob das Ergebnis nahe an J liegt
+    is_stjs_j = np.allclose(left_side, J, atol=tol)
+    
+    print(f"Wird die Bedingung S^T J S = J erfüllt? {'Ja' if is_stjs_j else 'Nein'}")
+    if not is_stjs_j:
+        # Zeige die Abweichung, wenn die Bedingung verletzt ist
+        diff_matrix = sp.Matrix(np.round(left_side - J, 4))
+        print("Differenz (S^T J S - J):")
+        pprint(diff_matrix)
+    print("─" * 42)
+
+
+# Modifizieren Sie diese bestehende Funktion
+def get_and_check_matrices_at_time(t_target, sol):
+    """
+    Findet den nächstgelegenen Zeitpunkt, prüft Matrizen,
+    gibt sie aus und gibt sie zurück.
     """
     # Finde den Index des Zeitpunkts, der t_target am nächsten kommt
     time_index = np.argmin(np.abs(sol.t - t_target))
@@ -137,57 +173,57 @@ def get_and_check_matrices_at_time(t_target, sol):
     # Extrahiere den vollständigen Zustandsvektor Y zu diesem Zeitpunkt
     Y_at_t = sol.y[:, time_index]
     
-    # 1. Rekonstruiere Sigma
+    # 1. Rekonstruiere Sigma und führe den PSD-Check durch
     sigma_flat = Y_at_t[10:]
     sigma_np = sigma_flat.reshape((10, 10))
     sigma_sym = sp.Matrix(sigma_np)
-
-    # 2. Führe den PSD-Check für Sigma durch
-    # Berechne die Eigenwerte der reellen, symmetrischen Matrix Sigma
     eigenvalues_sigma = np.linalg.eigvalsh(sigma_np)
-    # Prüfe, ob alle Eigenwerte nicht-negativ sind (mit einer kleinen Toleranz)
     is_psd = np.all(eigenvalues_sigma >= -1e-9)
     
-    print("\n--- PSD-Check für Kovarianzmatrix ---")
-    print(f"Ist die Kovarianzmatrix Σ(t) positiv semidefinit? {'Ja' if is_psd else 'Nein'}")
+    print("\n--- PSD-Check für Kovarianzmatrix Σ(t) ---")
+    print(f"Ist Σ(t) positiv semidefinit? {'Ja' if is_psd else 'Nein'}")
     if not is_psd:
         print(f"Kleinster Eigenwert von Σ(t): {np.min(eigenvalues_sigma):.4f}")
-    print("─" * 37)
-
-    # 3. Gib Sigma aus
+    print("─" * 43)
+    
     print("\nKovarianzmatrix Σ(t):")
     pprint(sigma_sym)
     
-    # 4. Rekonstruiere und drucke die symplektische Matrix s
+    # 2. Rekonstruiere die symplektische Matrix s
     m_at_t = Y_at_t[:10]
-    gellman_values = m_at_t[2:] # x1 bis x8
+    gellman_values = m_at_t[2:]
     s_np = build_symplectic_matrix(gellman_values)
     s_sym = sp.Matrix(s_np)
     
     print("\nSymplektische Matrix s(t):")
     pprint(s_sym)
 
-    # 5. Gib die SymPy-Matrizen zurück
+    # 3. FÜHRE DEN NEUEN SYMPLEKTISCHEN CHECK DURCH
+    # Da unsere Matrix 10x10 ist, ist n = 5
+    check_symplectic_properties(s_np, n=5)
+
     return sigma_sym, s_sym
+
 
 
 def is_PDS(x):
     if np.all(np.linalg.eigvals(x) > 0):
         return True
     else:
-        return eigenvals(x)
+        return np.linalg.eigenvals(x)
     
 
 # ========================================================================
 # HAUPTSKRIPT
 # ========================================================================
+
 if __name__ == "__main__":
     # 1. SETUP: Parameter und Anfangsbedingungen
     print("1. System wird eingerichtet...")
     g0, Delta1, Delta2, V, Gamma, Omega, kappa, eta = sp.symbols("g0 Delta1 Delta2 V Gamma Omega kappa eta")
     Omega_val = 8.0
     Gamma_val = 2.0
-    V_val = -0.5 * ((Omega_val / 4)**2 + 1)
+    V_val = -6.0 
     numeric_params = { 
         g0: 1, Delta1: 1, Delta2: 1, V: V_val, Gamma: Gamma_val, 
         Omega: Omega_val, kappa: 1, eta: 1 
@@ -201,13 +237,6 @@ if __name__ == "__main__":
     y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
     m0 = convert_state(y0_ket)
     Sigma0 = get_initial_covariance_matrix(y0_ket)
-
-
-
-    
-
-
-
 
     # 2. SYMBOLIK: Umwandlung in schnelle numerische Funktionen
     print("2. Symbolische Matrizen werden in numerische Funktionen umgewandelt...")
@@ -228,20 +257,24 @@ if __name__ == "__main__":
         dSigma_dt = G @ Sigma + Sigma @ G.T + W
         return np.concatenate([dm_dt.astype(np.float64), dSigma_dt.flatten()])
 
+
+
+
     G_sym, sDs_sym, Z_sym, P_sym, Q_sym,sE_sym, Z_prime_sym, W_sym, Sigma_dt_sym, Sigma_sym, K_sym = covar.get_important_matricies_symbol()
-    #pprint(G_sym)
-    #pprint(W_sym)
-    pprint(P_sym)
+
+
+    pprint(G_sym)
 
 
 
 
-    solve=True
-    # 4. LÖSEN
+
+    solve = True
+   # 4. LÖSEN
     if solve:
         print("3. Differentialgleichungssystem wird gelöst...")
-        t_span = (0.0, 50.0)##############################################################
-        t_eval = np.linspace(*t_span, 501)
+        t_span = (0.0, 200.0)
+        t_eval = np.linspace(*t_span, 1001)
         Y0 = np.concatenate([np.real(m0), Sigma0.flatten()])
         sol = solve_ivp(
             fun=lambda t, y: rhs_combined(t, y, params, g_func, w_func),
@@ -249,57 +282,72 @@ if __name__ == "__main__":
         )
         print("Lösung erfolgreich berechnet.")
 
-        # 5. POST-PROCESSING
-        print("4. Erstelle s(t) Zeitreihe...")
+        # ========================================================================
+        # 5. POST-PROCESSING & KOMBINIERTER PLOT
+        # ========================================================================
+        print("4. Berechne relevante Eigenwerte für G(t), W(t), M(t) und Sigma(t)...")
+
+        # --- Berechnung für G(t) und W(t) ---
+        min_eigenvalues_W = []
+        max_real_eigenvalues_G = [] # NEUE LISTE für G-Eigenwerte
+
+        for i in range(len(sol.t)):
+            m_t = sol.y[:10, i]
+            m_reordered = np.concatenate([m_t[2:], m_t[:2]])
+            
+            # Kleinster Eigenwert von W(t)
+            W_t = w_func(*m_reordered)
+            min_eigenvalues_W.append(np.min(np.linalg.eigvalsh(W_t)))
+
+            # NEU: Größter Realteil der Eigenwerte von G(t)
+            G_t = g_func(*m_reordered)
+            eigenvalues_G = np.linalg.eigvals(G_t) # G ist nicht symmetrisch -> eigvals
+            max_real_eigenvalues_G.append(np.max(np.real(eigenvalues_G)))
+
+        # --- Berechnung für M(t) und Sigma(t) ---
         s_timeseries = build_symplectic_matrix_ts(sol)
-        print("5. Führe PSD-Check durch und plotte kleinsten Eigenwert...")
-        eigenvalue_trajectories = []
+        min_eigenvalue_trajectory_M = []
+        min_eigenvalues_Sigma = []
+
         for i in range(len(sol.t)):
             sigma_t = sol.y[10:, i].reshape((10, 10))
+            min_eigenvalues_Sigma.append(np.min(np.linalg.eigvalsh(sigma_t)))
             s_t = s_timeseries[i]
             M_t = sigma_t + (1j / 2) * s_t
-            eigenvals = np.linalg.eigvalsh(M_t)
-            eigenvalue_trajectories.append(eigenvals)
-        eigenvalue_trajectories = np.array(eigenvalue_trajectories)
+            min_eigenvalue_trajectory_M.append(np.min(np.linalg.eigvalsh(M_t)))
+        
+        # --- Kombinierter Plot für alle vier Verläufe ---
+        print("5. Erstelle kombinierten Plot...")
+        plt.figure(figsize=(14, 8))
+        
+        plt.plot(sol.t, max_real_eigenvalues_G, label='Größter Realteil Eig(G(t)) (Stabilität)', color='green', linestyle='-.') # NEUER PLOT
+        plt.plot(sol.t, min_eigenvalues_W, label='Kleinster Eig(W(t))', color='darkcyan', linestyle='--')
+        plt.plot(sol.t, min_eigenvalues_Sigma, label=r'Kleinster Eig($\Sigma(t)$)', color='orange')
+        plt.plot(sol.t, min_eigenvalue_trajectory_M, label=r'Kleinster Eig(M(t) = $\Sigma + \frac{i}{2}s$)', color='purple', linewidth=2)
 
-        # Finde den kleinsten Eigenwert für jeden Zeitschritt
-        min_eigenvalue_trajectory = np.min(eigenvalue_trajectories, axis=1)
-
-        # 6. VISUALISIERUNG
-        plt.figure(figsize=(12, 7))
-        plt.plot(sol.t, min_eigenvalue_trajectory, label='Kleinster Eigenwert')
-        plt.axhline(0, color='red', linestyle='--', linewidth=2, label='Positivitäts-Grenze (y=0)')
-        plt.title('PSD Check: Zeitentwicklung des kleinsten Eigenwerts von Σ + i/2 s')
+        plt.axhline(0, color='red', linestyle=':', linewidth=2, label='Referenzlinie (y=0)')
+        plt.title('Zeitentwicklung der relevanten Eigenwerte')
         plt.xlabel('Zeit')
-        plt.ylabel('Eigenwert')
+        plt.ylabel('Wert des Eigenwerts / Realteils')
         plt.grid(True)
-
         plt.legend()
         plt.tight_layout()
-        #print("\nGrafik 'psd_check_min_eigenvalue.png' wurde gespeichert.")
         plt.show()
 
+        # ========================================================================
+        # 6. WEITERE PLOTS (unverändert)
+        # ========================================================================
+        # (Die Plots für die Kovarianz-Elemente und Populationen bleiben hier unverändert)
 
-        # --- Ändern Sie die Aufrufe am Ende Ihres `if __name__ == "__main__"`-Blocks zu diesem ---
-
-        # Beispiel 1: Prüfe und erhalte die Matrizen am Ende der Simulation
-        print("\n\n--- Matrizen am Ende der Simulation ---")
-        Sigma_ende, s_ende = get_and_check_matrices_at_time(t_target=sol.t[-1], sol=sol)
-
-        # Beispiel 2: Prüfe und erhalte die Matrizen in der Mitte der Simulation
-        print("\n\n--- Matrizen zur Mitte der Simulation ---")
-        Sigma_mitte, s_mitte = get_and_check_matrices_at_time(t_target=25.0, sol=sol)
-
-
-
-
-
+        # ========================================================================
+        # 6. WEITERE PLOTS (unverändert)
+        # ========================================================================
 
         # --- Plot 1: Alle Elemente der Kovarianzmatrix ---
-        print("Erstelle Plot 1: Zeitentwicklung der Kovarianzmatrix-Elemente...")
+        print("Erstelle Plot: Zeitentwicklung der Kovarianzmatrix-Elemente...")
         sigma_trajectories = sol.y[10:, :]
         plt.figure(figsize=(12, 7))
-        plt.plot(sol.t, sigma_trajectories.T, alpha=0.5) # alpha für bessere Sichtbarkeit
+        plt.plot(sol.t, sigma_trajectories.T, alpha=0.5) 
         plt.title('Zeitentwicklung aller 100 Elemente der Kovarianzmatrix Σ(t)')
         plt.xlabel('Zeit')
         plt.ylabel('Wert des Matrixelements')
@@ -307,24 +355,18 @@ if __name__ == "__main__":
         plt.show()
 
         # --- Plot 2: Populationen rho_ii ---
-        print("Erstelle Plot 2: Zeitentwicklung der Populationen...")
-        
+        print("Erstelle Plot: Zeitentwicklung der Populationen...")
         def reconstruct_populations(sol_obj):
-            # Extrahiere x3 und x8 aus den Erwartungswerten
-            # Indizes: 0=Q, 1=P, 2=x1, 3=x2, 4=x3, ..., 9=x8
             x3_t = sol_obj.y[4, :]
             x8_t = sol_obj.y[9, :]
-            
-            # Rekonstruiere die Populationen gemäß den Formeln
             sum00_11 = (2 + np.sqrt(3) * x8_t) / 3
             rho00_t = np.real((sum00_11 + x3_t) / 2)
             rho11_t = np.real((sum00_11 - x3_t) / 2)
             rho22_t = 1 - rho00_t - rho11_t
-            
             return rho00_t, rho11_t, rho22_t
 
         rho00, rho11, rho22 = reconstruct_populations(sol)
-        trace = rho00 + rho11 + rho22 # Die Summe sollte immer 1 sein
+        trace = rho00 + rho11 + rho22
 
         plt.figure(figsize=(12, 7))
         plt.plot(sol.t, rho00, label=r'$\rho_{00}(t)$')
@@ -338,3 +380,9 @@ if __name__ == "__main__":
         plt.legend()
         plt.grid(True)
         plt.show()
+
+        print("\n\n" + "="*70)
+        print("DETAILLIERTE MATRIX-ANALYSE FÜR EINEN ZEITPUNKT")
+        print("="*70)
+        # Überprüfe die Matrizen am Ende der Simulation
+        get_and_check_matrices_at_time(t_target=sol.t[-1], sol=sol)
