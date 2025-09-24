@@ -9,8 +9,17 @@ from sympy import symbols, I, Matrix, zeros, sqrt, simplify, pprint
 def get_C_matrix(v=None):
     # ... (keine Änderung)
     lambda_syms = symbols('lambda1:9')
-    f = {(0,1,2): 1, (0,3,6): 1/2, (1,3,5): 1/2, (1,4,6): -1/2,
-         (2,3,4): 1/2, (2,5,6): 1/2, (3,4,7): sqrt(3)/2, (5,6,7): -sqrt(3)/2}
+    f = {
+    (0,1,2): 1,
+    (0,3,6): 1/2,
+    (0,4,5): -1/2,      # <<< fehlte bisher: f_156 = -1/2
+    (1,3,5): 1/2,       # f_246 = +1/2 (ist schon korrekt)
+    (1,4,6): 1/2,
+    (2,3,4): 1/2,
+    (2,5,6): -1/2,
+    (3,4,7): sqrt(3)/2,
+    (5,6,7): sqrt(3)/2,
+}
     f_full = {}
     for (i,j,k), val in f.items():
         f_full[(i, j, k)] = f_full[(j, k, i)] = f_full[(k, i, j)] = val

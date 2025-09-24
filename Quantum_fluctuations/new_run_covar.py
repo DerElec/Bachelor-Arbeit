@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from typing import Sequence, Optional, Tuple, Dict
 import covar_everything as covar_everything
 import covar_everything as covar
-import symplectic_matrix as symplect
 # Python code (comments in English; console/output in German)
 
 import numpy as np
@@ -17,54 +16,90 @@ import numpy as np
 # Python code (comments in English; console/output in German)
 
 import numpy as np
+# def get_initial_covariance_matrix(y0_ket):
+#     """
+#     Calculates the initial covariance matrix Sigma(0) for a given
+#     initial state y0_ket.
+#     """
+#     if len(y0_ket) != 11:
+#         raise ValueError("The vector y0_ket must have 11 elements.")
+#     alpha = y0_ket[0]
+#     rho00, rho01, rho10, rho11, rho22, rho21, rho12, rho20, rho02 = y0_ket[2:]
+#     rho_3level = np.array([
+#         [rho00, rho01, rho02],
+#         [rho10, rho11, rho12],
+#         [rho20, rho21, rho22]
+#     ], dtype=complex)
+
+#     l1 = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 0]], dtype=complex)
+#     l2 = np.array([[0, -1j, 0], [1j, 0, 0], [0, 0, 0]], dtype=complex)
+#     l3 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 0]], dtype=complex)
+#     l4 = np.array([[0, 0, 1], [0, 0, 0], [1, 0, 0]], dtype=complex)
+#     l5 = np.array([[0, 0, -1j], [0, 0, 0], [1j, 0, 0]], dtype=complex)
+#     l6 = np.array([[0, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=complex)
+#     l7 = np.array([[0, 0, 0], [0, 0, -1j], [0, 1j, 0]], dtype=complex)
+#     l8 = (1/np.sqrt(3)) * np.array([[1, 0, 0], [0, 1, 0], [0, 0, -2]], dtype=complex)
+#     lambdas = [l1, l2, l3, l4, l5, l6, l7, l8]
+
+#     Sigma0 = np.zeros((10, 10))
+#     for i in range(8):
+#         for j in range(8):
+#             Li, Lj = lambdas[i], lambdas[j]
+#             anticommutator = Li @ Lj + Lj @ Li
+#             exp_val = np.trace(rho_3level @ anticommutator)
+#             Sigma0[i, j] = np.real(exp_val) / 2
+            
+#     re_a, im_a = np.real(alpha), np.imag(alpha)
+#     Sigma0[8, 8] = 2 * re_a**2 + 0.5
+#     Sigma0[9, 9] = 2 * im_a**2 + 0.5
+#     Sigma0[8, 9] = Sigma0[9, 8] = 2 * re_a * im_a
+    
+#     m_x = np.array([np.real(np.trace(rho_3level @ L)) for L in lambdas])
+#     m_q = np.sqrt(2) * re_a
+#     m_p = np.sqrt(2) * im_a
+    
+#     for i in range(8):
+#         Sigma0[i, 8] = Sigma0[8, i] = m_x[i] * m_q
+#         Sigma0[i, 9] = Sigma0[9, i] = m_x[i] * m_p
+
+#     return Sigma0
+
 def get_initial_covariance_matrix(y0_ket):
-    """
-    Calculates the initial covariance matrix Sigma(0) for a given
-    initial state y0_ket.
-    """
-    if len(y0_ket) != 11:
-        raise ValueError("The vector y0_ket must have 11 elements.")
+    import numpy as np
     alpha = y0_ket[0]
     rho00, rho01, rho10, rho11, rho22, rho21, rho12, rho20, rho02 = y0_ket[2:]
-    rho_3level = np.array([
-        [rho00, rho01, rho02],
-        [rho10, rho11, rho12],
-        [rho20, rho21, rho22]
-    ], dtype=complex)
+    rho = np.array([[rho00, rho01, rho02],
+                    [rho10, rho11, rho12],
+                    [rho20, rho21, rho22]], dtype=complex)
 
-    l1 = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 0]], dtype=complex)
-    l2 = np.array([[0, -1j, 0], [1j, 0, 0], [0, 0, 0]], dtype=complex)
-    l3 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 0]], dtype=complex)
-    l4 = np.array([[0, 0, 1], [0, 0, 0], [1, 0, 0]], dtype=complex)
-    l5 = np.array([[0, 0, -1j], [0, 0, 0], [1j, 0, 0]], dtype=complex)
-    l6 = np.array([[0, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=complex)
-    l7 = np.array([[0, 0, 0], [0, 0, -1j], [0, 1j, 0]], dtype=complex)
-    l8 = (1/np.sqrt(3)) * np.array([[1, 0, 0], [0, 1, 0], [0, 0, -2]], dtype=complex)
-    lambdas = [l1, l2, l3, l4, l5, l6, l7, l8]
+    # Gell-Mann:
+    l1 = np.array([[0,1,0],[1,0,0],[0,0,0]],complex)
+    l2 = np.array([[0,-1j,0],[1j,0,0],[0,0,0]],complex)
+    l3 = np.array([[1,0,0],[0,-1,0],[0,0,0]],complex)
+    l4 = np.array([[0,0,1],[0,0,0],[1,0,0]],complex)
+    l5 = np.array([[0,0,-1j],[0,0,0],[1j,0,0]],complex)
+    l6 = np.array([[0,0,0],[0,0,1],[0,1,0]],complex)
+    l7 = np.array([[0,0,0],[0,0,-1j],[0,1j,0]],complex)
+    l8 = (1/np.sqrt(3))*np.array([[1,0,0],[0,1,0],[0,0,-2]],complex)
+    lams = [l1,l2,l3,l4,l5,l6,l7,l8]
 
-    Sigma0 = np.zeros((10, 10))
-    for i in range(8):
-        for j in range(8):
-            Li, Lj = lambdas[i], lambdas[j]
-            anticommutator = Li @ Lj + Lj @ Li
-            exp_val = np.trace(rho_3level @ anticommutator)
-            Sigma0[i, j] = np.real(exp_val) / 2
-            
-    re_a, im_a = np.real(alpha), np.imag(alpha)
-    Sigma0[8, 8] = 2 * re_a**2 + 0.5
-    Sigma0[9, 9] = 2 * im_a**2 + 0.5
-    Sigma0[8, 9] = Sigma0[9, 8] = 2 * re_a * im_a
-    
-    m_x = np.array([np.real(np.trace(rho_3level @ L)) for L in lambdas])
-    m_q = np.sqrt(2) * re_a
-    m_p = np.sqrt(2) * im_a
-    
-    for i in range(8):
-        Sigma0[i, 8] = Sigma0[8, i] = m_x[i] * m_q
-        Sigma0[i, 9] = Sigma0[9, i] = m_x[i] * m_p
+    # <λ_a>
+    m = np.array([np.trace(rho@L) for L in lams], dtype=complex).real
 
-    return Sigma0
+    S = np.zeros((10,10), float)
+    # Spin covariances = 1/2⟨{λa,λb}⟩ - ⟨λa⟩⟨λb⟩
+    for a in range(8):
+        for b in range(8):
+            val = np.trace(rho@(lams[a]@lams[b] + lams[b]@lams[a]))
+            S[a,b] = 0.5*val.real - m[a]*m[b]
 
+    # Boson block (coherent state):
+    S[8,8] = 0.5
+    S[9,9] = 0.5
+    # No initial atom-field correlations:
+    # S[a,8]=S[a,9]=S[8,a]=S[9,a]=0
+
+    return S
 def build_symplectic_matrix(populations):
     """
     Creates a 10x10 symplectic matrix for ONE set of population values.
@@ -72,8 +107,8 @@ def build_symplectic_matrix(populations):
     if len(populations) != 8:
         raise ValueError("The 'populations' vector must have exactly 8 elements.")
     f = np.zeros((8, 8, 8))
-    f[0, 1, 2] = 1; f[0, 3, 6] = 0.5; f[0, 4, 5] = 0.5
-    f[1, 3, 5] = -0.5; f[1, 4, 6] = 0.5
+    f[0, 1, 2] = 1; f[0, 3, 6] = 0.5; f[0, 4, 5] = -0.5
+    f[1, 3, 5] = 0.5; f[1, 4, 6] = 0.5
     f[2, 3, 4] = 0.5; f[2, 5, 6] = -0.5
     f[3, 4, 7] = np.sqrt(3) / 2; f[5, 6, 7] = np.sqrt(3) / 2
     for i in range(8):
@@ -190,18 +225,20 @@ def get_and_check_matrices_at_time(t_target, sol):
     pprint(sigma_sym)
     
     # 2. Rekonstruiere die symplektische Matrix s
+    # 2. s(t) = commutator form (NOT a symplectic transform)
     m_at_t = Y_at_t[:10]
     gellman_values = m_at_t[2:]
-    s_np = build_symplectic_matrix(gellman_values)
+    s_np = build_commutator_form_s_2f(gellman_values)
     s_sym = sp.Matrix(s_np)
-    
-    print("\nSymplektische Matrix s(t):")
+
+    print("\nKommutator-Form s(t):")
     pprint(s_sym)
+    check_commutator_form(s_np, gellman_values)
 
-    # 3. FÜHRE DEN NEUEN SYMPLEKTISCHEN CHECK DURCH
-    # Da unsere Matrix 10x10 ist, ist n = 5
-    check_symplectic_properties(s_np, n=5)
-
+    # Heisenberg/RS-Check
+    M = sigma_np + 0.5j*s_np
+    eigM_min = np.min(np.linalg.eigvalsh(M))
+    print("\nKleinster Eigenwert von M(t)=Σ+i/2 s:", eigM_min)
     return sigma_sym, s_sym
 
 
@@ -213,16 +250,78 @@ def is_PDS(x):
         return np.linalg.eigenvals(x)
     
 
+
+def su3_f_tensor_standard():
+    """Standard SU(3) f_{abc} for Tr[λ_a λ_b]=2 δ_ab and [λ_a,λ_b]=2i f_{abc} λ_c."""
+    import numpy as np
+    f = np.zeros((8,8,8), dtype=float)
+    # Base triples (ascending):
+    f[0,1,2] = +1.0            # f_123
+    f[0,3,6] = +0.5            # f_147
+    f[0,4,5] = -0.5            # f_156  (SIGN FIX)
+    f[1,3,5] = +0.5            # f_246  (SIGN FIX)
+    f[1,4,6] = +0.5            # f_257
+    f[2,3,4] = +0.5            # f_345
+    f[2,5,6] = -0.5            # f_367
+    f[3,4,7] = np.sqrt(3)/2.0  # f_458
+    f[5,6,7] = np.sqrt(3)/2.0  # f_678
+    # total antisymmetry:
+    for a in range(8):
+        for b in range(8):
+            for c in range(8):
+                if a<b<c and f[a,b,c]!=0:
+                    val = f[a,b,c]
+                    f[b,a,c] = -val; f[a,c,b] = -val; f[c,a,b] =  val
+                    f[c,b,a] = -val; f[b,c,a] =  val
+    return f
+
+def check_commutator_form(s, m_vec, tol=1e-10):
+    import numpy as np
+    ok = True
+    if not np.allclose(s, -s.T, atol=tol):
+        print("s ist nicht schiefsymmetrisch."); ok=False
+    qp = s[8:10,8:10]
+    if not np.allclose(qp, np.array([[0,1],[-1,0]]), atol=tol):
+        print("Q,P-Block ist nicht kanonisch."); ok=False
+    m1,m2,m3 = m_vec[0], m_vec[1], m_vec[2]
+    target = np.array([[0,   2*m3, -2*m2],
+                       [-2*m3, 0,   2*m1],
+                       [2*m2, -2*m1, 0]])
+    if not np.allclose(s[0:3,0:3], target, atol=tol):
+        print("SU(2)-Unterblock (λ1..λ3) stimmt nicht.")
+        print("Erwartet:\n", target, "\nIst:\n", s[0:3,0:3]); ok=False
+    if ok: print("s-Form OK (schief, QP ok, SU(2)-Unterblock ok).")
+
+def build_commutator_form_s_2f(m_vec):
+    """
+    Build the 10x10 commutator form s with s_ab = 2 * sum_c f_{abc} m_c.
+    Order: indices 0..7 -> λ1..λ8, indices 8..9 -> Q,P.
+    """
+    import numpy as np
+    assert len(m_vec)==8, "m_vec must be the 8 singles <λ1..λ8>."
+    f = su3_f_tensor_standard()
+    s = np.zeros((10,10), dtype=float)
+    # Spin block: s_ab = 2 f_{abc} m_c
+    for a in range(8):
+        for b in range(8):
+            s[a,b] = 2.0 * np.dot(f[a,b,:], m_vec)
+    # Bosonic block
+    s[8,9] = +1.0
+    s[9,8] = -1.0
+    return s
+
+def build_s_form_timeseries_2f(sol):
+    """Time series of the commutator form s(t) with s_ab=2 f_{abc} m_c."""
+    s_times = []
+    m_times = sol.y[:10, :]
+    for i in range(m_times.shape[1]):
+        gellman = m_times[2:, i]     # λ1..λ8
+        s_times.append(build_commutator_form_s_2f(gellman))
+    return s_times
+
 # ========================================================================
 # HAUPTSKRIPT
 # ========================================================================
-
-
-
-
-
-
-
 
 if __name__ == "__main__":
     # 1. SETUP: Parameter und Anfangsbedingungen
@@ -276,11 +375,11 @@ if __name__ == "__main__":
 
 
 
-    solve = False
+    solve = True
    # 4. LÖSEN
     if solve:
         print("3. Differentialgleichungssystem wird gelöst...")
-        t_span = (0.0, 20.0)
+        t_span = (0.0, 80.0)
         t_eval = np.linspace(*t_span, 1001)
         Y0 = np.concatenate([np.real(m0), Sigma0.flatten()])
         sol = solve_ivp(
@@ -312,7 +411,8 @@ if __name__ == "__main__":
             max_real_eigenvalues_G.append(np.max(np.real(eigenvalues_G)))
 
         # --- Berechnung für M(t) und Sigma(t) ---
-        s_timeseries = build_symplectic_matrix_ts(sol)
+        #s_timeseries = build_symplectic_matrix_ts(sol)
+        s_timeseries = build_s_form_timeseries_2f(sol)
         min_eigenvalue_trajectory_M = []
         min_eigenvalues_Sigma = []
 

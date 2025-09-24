@@ -5,8 +5,8 @@ import numpy as np
 def get_S_matrix_gellman(v=None):
 
     lambda_syms = symbols('lambda1:9')
-    f = {(0,1,2): 1, (0,3,6): 1/2, (1,3,5): 1/2, (1,4,6): -1/2,
-         (2,3,4): 1/2, (2,5,6): 1/2, (3,4,7): sqrt(3)/2, (5,6,7): -sqrt(3)/2}
+    f = {(0,1,2): 1, (0,3,6): 1/2, (1,3,5): 1/2, (1,4,6): 1/2,
+         (2,3,4): 1/2, (2,5,6): -1/2, (3,4,7): sqrt(3)/2, (5,6,7): sqrt(3)/2}
     f_full = {}
     for (i,j,k), val in f.items():
         f_full[(i, j, k)] = f_full[(j, k, i)] = f_full[(k, i, j)] = val
@@ -115,11 +115,11 @@ def get_symplectic(v=None):
         (0,1,2): 1,
         (0,3,6):  1/2,
         (1,3,5):  1/2,
-        (1,4,6): -1/2,
+        (1,4,6): 1/2,
         (2,3,4):  1/2,
-        (2,5,6):  1/2,
+        (2,5,6):  -1/2,
         (3,4,7):  sqrt(3)/2,
-        (5,6,7): -sqrt(3)/2,
+        (5,6,7): sqrt(3)/2,
     }
     # Voll antisymmetrisch machen
     f_full = {}

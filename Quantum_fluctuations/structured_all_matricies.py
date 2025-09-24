@@ -162,28 +162,7 @@ def run_all():
     # Hilfsfunktion für f
     f_sym = lambda a,b,c: f_arr[a-1][b-1][c-1] if 1<=a<=8 and 1<=b<=8 and 1<=c<=8 else 0
 
-    # -----------------------------
-    # Z- und Z'-Matrix Berechnung
-    # -----------------------------
-    # def compute_Z_prime():
-    #     Zp = sp.zeros(10)
-    #     for a in range(1,9):
-    #         for b in range(1,9):
-    #             expr = sum(
-    #                 gamma * m[c-1] * m[d-1] * (
-    #                     f_sym(1,a,c)*f_sym(b,1,d)
-    #                     + I*f_sym(1,a,c)*f_sym(b,2,d)
-    #                     - I*f_sym(2,a,c)*f_sym(b,1,d)
-    #                     + f_sym(2,a,c)*f_sym(b,2,d)
-    #                 )
-    #                 for c in range(1,9) for d in range(1,9)
-    #             )
-    #             Zp[a-1,b-1] = sp.simplify(expr)
-    #     return Zp
 
-    # Z_prime = compute_Z_prime()
-    # Z_temp = (Z_prime + Z_prime.T)/2
-    # Z = sp.Matrix(10, 10, lambda i,j: sp.simplify(sp.expand(Z_temp[i,j])))
     def check_half_MM_T_real(M):
         """
         Return (ok, ImPart) where ok=True iff (M*M.T)/2 has zero imaginary part.
@@ -192,29 +171,6 @@ def run_all():
         ImS = S.applyfunc(lambda x: sp.simplify(sp.im(x)))
         ok = all(el == 0 for el in ImS)  # element-wise test
         return ok, ImS
-    
-
-    def compute_Z_prime():
-        """
-        1) Build 8x8 matrix Z8 (a.k.a. R_ab) from SU(3) structure constants.
-        2) Check if (Z8 * Z8.T)/2 is real.
-        3) Embed Z8 into a 10x10 matrix (top-left block), zeros elsewhere.
-        """
-        Z8, syms = compute_R_su3(Gamma=None, simplify_entries=False)
-
-        # Realness check for (Z8 * Z8^T) / 2
-        ok, ImS = check_half_MM_T_real(Z8)
-        print(f"Check: (Z' * Z'^T)/2 ist reell? {ok}")
-        if not ok:
-            print("Nicht verschwindender Imaginärteil von (Z' * Z'^T)/2 (symbolisch):")
-            sp.pprint(ImS)
-
-        # Embed into 10x10 (top-left block)
-        Zp = sp.zeros(10)
-        for i in range(8):
-            for j in range(8):
-                Zp[i, j] = Z8[i, j]
-        return Zp
     
 
 
@@ -333,7 +289,7 @@ def run_all():
         return sp.simplify(P)
 
    
-   
+
     P=build_P_sym()
     P = sp.simplify(P)
     #sp.pprint(P)
