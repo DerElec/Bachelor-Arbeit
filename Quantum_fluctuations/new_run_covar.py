@@ -217,6 +217,13 @@ def is_PDS(x):
 # HAUPTSKRIPT
 # ========================================================================
 
+
+
+
+
+
+
+
 if __name__ == "__main__":
     # 1. SETUP: Parameter und Anfangsbedingungen
     print("1. System wird eingerichtet...")
@@ -263,17 +270,17 @@ if __name__ == "__main__":
     G_sym, sDs_sym, Z_sym, P_sym, Q_sym,sE_sym, Z_prime_sym, W_sym, Sigma_dt_sym, Sigma_sym, K_sym = covar.get_important_matricies_symbol()
 
 
-    pprint(G_sym)
+    pprint(Q_sym)
 
 
 
 
 
-    solve = True
+    solve = False
    # 4. LÖSEN
     if solve:
         print("3. Differentialgleichungssystem wird gelöst...")
-        t_span = (0.0, 200.0)
+        t_span = (0.0, 20.0)
         t_eval = np.linspace(*t_span, 1001)
         Y0 = np.concatenate([np.real(m0), Sigma0.flatten()])
         sol = solve_ivp(

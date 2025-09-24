@@ -253,41 +253,6 @@ def run_all():
     # -----------------------------
     # P-Matrix Berechnung
     # -----------------------------
-    # mP = sp.symbols('m1:11')
-    # #F = sp.symbols('F1:11')
-    # g0, V_const = sp.symbols('g0 V')
-    # Delta1,Delta2, Omega, N, eta = sp.symbols('Delta1 Delta2 Omega N eta')
-
-    # h9 = g0; h10 = -g0; h88 = V_const/3
-    # omega = [0,0,-Delta1,0,0,Omega,0,-2*V_const/(3*sp.sqrt(3))-(2/sp.sqrt(3))*Delta2,0,2*sp.sqrt(N)*eta]
-
-    # f_P = lambda g,a,c: f_sym(g,a,c) if g<=8 and a<=8 and c<=8 else 0
-
-    # P = sp.zeros(10)
-    # for a in range(1,11):
-    #     for G in range(1,11):
-    #         coeff = 0
-    #         if G==9:
-    #             sumA = sum(f_P(1,a,c)*mP[c-1] for c in range(1,9))
-    #             coeff += -h9*2*sumA
-    #         if G<=8:
-    #             coeff += -h9*2*mP[8]*f_P(1,a,G)
-    #         if G==1:
-    #             coeff += -h9*(sp.Rational(1,2) if a==10 else 0)
-    #         if G==10:
-    #             sumB = sum(f_P(2,a,c)*mP[c-1] for c in range(1,9))
-    #             coeff += -h10*2*sumB
-    #         if G<=8:
-    #             coeff += -h10*2*mP[9]*f_P(2,a,G)
-    #         if G==2:
-    #             coeff += h10*(sp.Rational(1,2) if a==9 else 0)
-    #         if G==8:
-    #             coeff += -h88*4*f_P(8,a,G)*mP[G-1]
-    #         if G<=8:
-    #             coeff += -h88*4*mP[7]*f_P(8,a,G)
-    #         if G<=8:
-    #             for i in range(1,9): coeff += -omega[i-1]*f_P(i,a,G)*2# - ACHTUNG HIER BEARBEITET
-    #         P[a-1,G-1] = sp.factor(coeff)#*F[G-1]
 
 
     # --- Symbols (keep same names as in your code) ---
@@ -309,7 +274,7 @@ def run_all():
     omega[3]  = -Delta1/2
     omega[6]  =  Omega/2
     omega[8]  = (Delta1/2 - Delta2 - 2*V_const/3) / sp.sqrt(3)
-    omega[10] =  2*eta  # belasse √N, wie du es vorher genutzt hast
+    omega[10] =  sp.sqrt(2)*eta  # belasse √N, wie du es vorher genutzt hast
 
     # --- Quadratic couplings h_{μν} (symmetric), with γ absorbed in g0 ---
     # Convention: H_ia = (ħ/N) * sum_{μν} h_{μν} m_μ m_ν
@@ -319,8 +284,8 @@ def run_all():
         h[(nu, mu)] = val
 
     # Light–matter: g0 (m1*q + m2*p)  -> note: plus for m2*p with your q,p def
-    set_h(1, 9,  g0/2)
-    set_h(2, 10, g0/2)
+    set_h(1, 9,  g0/sp.sqrt(2))
+    set_h(2, 10, -g0/sp.sqrt(2))
 
     # V-term quadratic piece: (V/3) m8^2
     set_h(8, 8, V_const/3)
@@ -333,7 +298,7 @@ def run_all():
         for a in range(1, 11):
             for G in range(1, 11):
                 if a <= 8 and G <= 8:
-                    P[a-1, G-1] += sum(omega[i] * f_P(i, a, G) for i in (3, 6, 8))
+                    P[a-1, G-1] += sum(2*omega[i] * f_P(i, a, G) for i in (3, 6, 8)) # ä#ääääääääääääääääääääääääääääänderung   <----------------------------
                 # (bosonic rows a=9,10: no f-contribution from H0)
 
         # (2) Bilinear H_ia contribution:
@@ -346,8 +311,8 @@ def run_all():
                     s = 0
                     for (mu, nu), hval in h.items():
                         if 1 <= nu <= 8:
-                            s += hval * mP[mu-1] * f_P(nu, a, G)
-                    P[a-1, G-1] += (2) * s
+                            s += hval * mP[mu-1] * f_P(nu, a, G)  #ääääääääääääääääääääääääääääänderung  <----------------------------
+                    P[a-1, G-1] += 2 * s
 
                 # Second term: bosonic columns (G=9,10)
                 if a <= 8 and G in (9, 10):
@@ -357,7 +322,7 @@ def run_all():
                         if hGnu != 0:
                             s += hGnu * sum(f_P(nu, a, c) * mP[c-1] for c in range(1, 9))
                     if s != 0:
-                        P[a-1, G-1] += (2) * s
+                        P[a-1, G-1] += 2 * s
 
         # (3) Bosonic rows from canonical equations:
         #     qdot = + g0 * m2 + 2N*eta     -> P[9,2]  = + g0  (inhom. 2N*eta not in P)
@@ -367,32 +332,8 @@ def run_all():
 
         return sp.simplify(P)
 
-    P_sym = build_P_sym()
-
-    # --- Numeric wrapper so your old code can use a ready-to-evaluate P ---
-    # def P_numeric(numeric_params: dict, m_vec: np.ndarray) -> np.ndarray:
-    #     """
-    #     Return P as a numeric (complex) numpy array after substituting:
-    #     - parameters from numeric_params (keys: Delta1, Delta2, Omega, V, N, eta, g0)
-    #     - current singles m1..m10 from m_vec
-    #     """
-    #     # Build substitution dict (params)
-    #     subs = {}
-    #     for key, sym in [('Delta1', Delta1), ('Delta2', Delta2), ('Omega', Omega),
-    #                     ('V', V_const), ('eta', eta), ('g0', g0)]:
-    #         if key in numeric_params:
-    #             subs[sym] = float(numeric_params[key])
-    #         else:
-    #             raise KeyError(f"Fehlender Parameter: {key}")
-
-    #     # Add singles m1..m10
-    #     if len(m_vec) != 10:
-    #         raise ValueError("Erwarte m_vec mit Länge 10 (m1..m10).")
-    #     for i in range(10):
-    #         subs[mP[i]] = float(m_vec[i])
-
-    #     P_eval = np.array(P_sym.subs(subs), dtype=np.complex128)
-    #     return P_eval
+   
+   
     P=build_P_sym()
     P = sp.simplify(P)
     #sp.pprint(P)
