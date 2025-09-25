@@ -107,10 +107,15 @@ def build_symplectic_matrix(populations):
     if len(populations) != 8:
         raise ValueError("The 'populations' vector must have exactly 8 elements.")
     f = np.zeros((8, 8, 8))
-    f[0, 1, 2] = 1; f[0, 3, 6] = 0.5; f[0, 4, 5] = -0.5
-    f[1, 3, 5] = 0.5; f[1, 4, 6] = 0.5
-    f[2, 3, 4] = 0.5; f[2, 5, 6] = -0.5
-    f[3, 4, 7] = np.sqrt(3) / 2; f[5, 6, 7] = np.sqrt(3) / 2
+    f[0, 1, 2] = 1; 
+    f[0, 3, 6] = 0.5; 
+    f[0, 4, 5] = -0.5
+    f[1, 3, 5] = 0.5; 
+    f[1, 4, 6] = 0.5
+    f[2, 3, 4] = 0.5; 
+    f[2, 5, 6] = -0.5
+    f[3, 4, 7] = np.sqrt(3) / 2; 
+    f[5, 6, 7] = np.sqrt(3) / 2
     for i in range(8):
         for j in range(i + 1, 8):
             for k in range(j + 1, 8):
@@ -148,47 +153,7 @@ def build_symplectic_matrix_ts(sol):
         
     return matrix_timeseries
 
-# Fügen Sie diese Funktion zu den anderen Hilfsfunktionen am Anfang hinzu
-def check_symplectic_properties(s_matrix_np: np.ndarray, n: int, tol: float = 1e-9):
-    """
-    Überprüft eine gegebene Matrix auf ihre symplektischen Eigenschaften.
 
-    Args:
-        s_matrix_np (np.ndarray): Die zu prüfende (2n x 2n) Matrix.
-        n (int): Die halbe Dimension der Matrix.
-        tol (float): Toleranz für die numerischen Vergleiche.
-    """
-    dim = 2 * n
-    if s_matrix_np.shape != (dim, dim):
-        raise ValueError(f"Matrix muss die Dimension ({dim}, {dim}) haben.")
-
-    # 1. Determinanten-Check
-    det_s = np.linalg.det(s_matrix_np)
-    is_det_one = np.isclose(det_s, 1.0, atol=tol)
-    
-    print("\n--- Symplektischer Check für Matrix s(t) ---")
-    print(f"Determinante von s(t): {det_s:.6f}")
-    print(f"Ist die Determinante ≈ 1? {'Ja' if is_det_one else 'Nein'}")
-
-    # 2. Symplektische Bedingung: S^T * J * S = J
-    # Erstelle die Standard-symplektische-Blockmatrix J
-    I_n = np.identity(n)
-    zero_n = np.zeros((n, n))
-    J = np.block([[zero_n, I_n], [-I_n, zero_n]])
-    
-    # Berechne die linke Seite der Gleichung
-    left_side = s_matrix_np.T @ J @ s_matrix_np
-    
-    # Prüfe, ob das Ergebnis nahe an J liegt
-    is_stjs_j = np.allclose(left_side, J, atol=tol)
-    
-    print(f"Wird die Bedingung S^T J S = J erfüllt? {'Ja' if is_stjs_j else 'Nein'}")
-    if not is_stjs_j:
-        # Zeige die Abweichung, wenn die Bedingung verletzt ist
-        diff_matrix = sp.Matrix(np.round(left_side - J, 4))
-        print("Differenz (S^T J S - J):")
-        pprint(diff_matrix)
-    print("─" * 42)
 
 
 # Modifizieren Sie diese bestehende Funktion
@@ -327,20 +292,26 @@ if __name__ == "__main__":
     # 1. SETUP: Parameter und Anfangsbedingungen
     print("1. System wird eingerichtet...")
     g0, Delta1, Delta2, V, Gamma, Omega, kappa, eta = sp.symbols("g0 Delta1 Delta2 V Gamma Omega kappa eta")
-    Omega_val = 8.0
-    Gamma_val = 2.0
-    V_val = -6.0 
+    Omega_val = 0#8.0  # laser drive 1->2
+    Gamma_val = 2.0    #atom decay 1->0
+    V_val = 0#-6.0  #interaction potential
+    Delta1_val=1  #detuning from 1 
+    Delta2_val=1 #detuning from 2
+    #############
+    g0_val=1 #cavity coupling 
+    eta_val=0 # cavity drive 
+    kappa_val=1 #cavity decay
     numeric_params = { 
-        g0: 1, Delta1: 1, Delta2: 1, V: V_val, Gamma: Gamma_val, 
-        Omega: Omega_val, kappa: 1, eta: 1 
+        g0:     g0_val, Delta1: Delta1_val, Delta2: Delta2_val, V: V_val, Gamma: Gamma_val, 
+        Omega: Omega_val, kappa:   kappa_val, eta: eta_val
     }
     params = {
-        'g0':1, 'kappa': 1.0, 'gamma': 1.0, 'Gamma': Gamma_val,
-        'Omega': Omega_val, 'delta1': 1.0, 'delta2': 1.0,
-        'eta': 1.0, 'V': V_val
+        'g0':    g0_val, 'kappa':   kappa_val, 'gamma': g0_val, 'Gamma': Gamma_val,
+        'Omega': Omega_val, 'delta1': Delta1_val, 'delta2':Delta2_val,
+        'eta': eta_val, 'V': V_val
     }
     
-    y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    y0_ket = np.array([10+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
     m0 = convert_state(y0_ket)
     Sigma0 = get_initial_covariance_matrix(y0_ket)
 
@@ -369,7 +340,9 @@ if __name__ == "__main__":
     G_sym, sDs_sym, Z_sym, P_sym, Q_sym,sE_sym, Z_prime_sym, W_sym, Sigma_dt_sym, Sigma_sym, K_sym = covar.get_important_matricies_symbol()
 
 
-    pprint(Q_sym)
+    #pprint(Q_sym)
+    #pprint(P_sym)
+    pprint(G_sym)
 
 
 
@@ -486,10 +459,10 @@ if __name__ == "__main__":
         plt.ylabel('Population')
         plt.legend()
         plt.grid(True)
-        plt.show()
+        #plt.show()
 
-        print("\n\n" + "="*70)
-        print("DETAILLIERTE MATRIX-ANALYSE FÜR EINEN ZEITPUNKT")
-        print("="*70)
-        # Überprüfe die Matrizen am Ende der Simulation
-        get_and_check_matrices_at_time(t_target=sol.t[-1], sol=sol)
+        # print("\n\n" + "="*70)
+        # print("DETAILLIERTE MATRIX-ANALYSE FÜR EINEN ZEITPUNKT")
+        # print("="*70)
+        # # Überprüfe die Matrizen am Ende der Simulation
+        # get_and_check_matrices_at_time(t_target=sol.t[-1], sol=sol)

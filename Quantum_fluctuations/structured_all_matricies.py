@@ -240,11 +240,12 @@ def run_all():
         h[(nu, mu)] = val
 
     # Light–matter: g0 (m1*q + m2*p)  -> note: plus for m2*p with your q,p def
-    set_h(1, 9,  g0/sp.sqrt(2))
-    set_h(2, 10, -g0/sp.sqrt(2))
+    set_h(1, 9,  g0/(2*sp.sqrt(2)))
+    
+    set_h(2, 10, g0/(2*sp.sqrt(2)))
 
     # V-term quadratic piece: (V/3) m8^2
-    set_h(8, 8, V_const/3)
+    set_h(8, 8, 2*V_const/3)
 
     # --- Build symbolic P(m; params) ---
     def build_P_sym():
@@ -254,7 +255,7 @@ def run_all():
         for a in range(1, 11):
             for G in range(1, 11):
                 if a <= 8 and G <= 8:
-                    P[a-1, G-1] += sum(2*omega[i] * f_P(i, a, G) for i in (3, 6, 8)) # ä#ääääääääääääääääääääääääääääänderung   <----------------------------
+                    P[a-1, G-1] += -sum(2*omega[i] * f_P(i, a, G) for i in (3, 6, 8)) # ä#ääääääääääääääääääääääääääääänderung   <----------------------------
                 # (bosonic rows a=9,10: no f-contribution from H0)
 
         # (2) Bilinear H_ia contribution:
@@ -268,7 +269,7 @@ def run_all():
                     for (mu, nu), hval in h.items():
                         if 1 <= nu <= 8:
                             s += hval * mP[mu-1] * f_P(nu, a, G)  #ääääääääääääääääääääääääääääänderung  <----------------------------
-                    P[a-1, G-1] += 2 * s
+                    P[a-1, G-1] +=  -2*s
 
                 # Second term: bosonic columns (G=9,10)
                 if a <= 8 and G in (9, 10):
@@ -278,13 +279,13 @@ def run_all():
                         if hGnu != 0:
                             s += hGnu * sum(f_P(nu, a, c) * mP[c-1] for c in range(1, 9))
                     if s != 0:
-                        P[a-1, G-1] += 2 * s
+                        P[a-1, G-1] +=  -2*s
 
         # (3) Bosonic rows from canonical equations:
         #     qdot = + g0 * m2 + 2N*eta     -> P[9,2]  = + g0  (inhom. 2N*eta not in P)
         #     pdot = - g0 * m1              -> P[10,1] = - g0
-        P[9-1,  2-1] +=  g0
-        P[10-1, 1-1] += -g0
+        P[9-1,  2-1] +=  g0/(sp.sqrt(2))
+        P[10-1, 1-1] += -g0/(sp.sqrt(2))
 
         return sp.simplify(P)
 
@@ -350,7 +351,6 @@ def run_all():
                     for d in range(1, PHYS_DIM+1):
                         # f_bd with plus i
                         f_bd_plus = f_sym(1, b, d) + I * f_sym(2, b, d)
-
                         # T_cd = (2/3) δ_cd + sum_k m_k ( d^{cdk} + i f^{cdk} )
                         delta_cd = 1 if c == d else 0
                         T_cd = sp.Rational(2, 3) * delta_cd
@@ -371,7 +371,7 @@ def run_all():
         return Zp
 
 
-    G = P + sE + Q#P + sE + Q
+    G = P + sE + Q.T#P + sE + Q
 
     Z_prime=compute_Z_prime_new()
     Z=sp.simplify((Z_prime+Z_prime.T)/2)
