@@ -130,13 +130,13 @@ def rhs_gellmann_qp_from_x(t, x, params):
 if __name__ == '__main__':
     # define parameters
     params = dict(
-        kappa=1.0, gamma=1.0, Gamma=1.0,
+        kappa=1, gamma=1.0, Gamma=1.0,
         Omega=8.0, delta1=1.0, delta2=1.0,
-        eta=1.0, V=-8.0
+        eta=1.0, V=-6.0
     )
 
     # time span
-    t0, t_end = 0.0, 2000.0
+    t0, t_end = 0.0, 20.0
 
     # initial ket-state (ρ00=1)
     y0 = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])

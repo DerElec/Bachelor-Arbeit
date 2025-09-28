@@ -126,15 +126,26 @@ if __name__ == "__main__":
     # 1. SETUP: Parameter und Anfangsbedingungen
     print("1. System wird eingerichtet...")
     g0, Delta1, Delta2, V, Gamma, Omega, kappa, eta = sp.symbols("g0 Delta1 Delta2 V Gamma Omega kappa eta")
-    Omega_val =0#8.0  # laser drive 1->2
-    Gamma_val = 0  #atom decay 1->0
-    V_val =0#-6.0  #interaction potential
-    Delta1_val=0  #detuning from 1 
-    Delta2_val=0 #detuning from 2
+    Omega_val =8#8.0  # laser drive 1->2
+    Gamma_val = 1  #atom decay 1->0
+    V_val =-6#-6.0  #interaction potentiall
+    Delta1_val=1  #detuning from 1 
+    Delta2_val=1 #detuning from 2
     #############
     g0_val=1#cavity coupling 
-    eta_val=0 # cavity drive 
+    eta_val=1 # cavity drive 
     kappa_val=1#cavity decay
+    T_end = 200.0         # total simulation time (adjust as needed)
+    N_eval = int(T_end*100)
+    y0_ket = np.array([0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    #y0_ket = np.array([0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    m0 = convert_state(y0_ket)
+    Sigma0 = get_initial_covariance_matrix(y0_ket)
+
+
+
+
+
     numeric_params = { 
         g0:     g0_val, Delta1: Delta1_val, Delta2: Delta2_val, V: V_val, Gamma: Gamma_val, 
         Omega: Omega_val, kappa:   kappa_val, eta: eta_val
@@ -145,11 +156,6 @@ if __name__ == "__main__":
         'eta': eta_val, 'V': V_val
     }
     #a a^dagger ket00, ket01, ket10, ket11, ket22, ket21, ket12, ket20, ket02 
-    y0_ket = np.array([1+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
-    #y0_ket = np.array([0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
-    m0 = convert_state(y0_ket)
-    Sigma0 = get_initial_covariance_matrix(y0_ket)
-
     # 2. SYMBOLIK: Umwandlung in schnelle numerische Funktionen
     print("2. Symbolische Matrizen werden in numerische Funktionen umgewandelt...")
     m_syms = sp.symbols('m1:11')
@@ -246,67 +252,142 @@ if __name__ == "__main__":
         return np.concatenate([dx, dSigma.reshape(-1)])
 
     # --- Time grid and integration --------------------------------------------------
-    T_end = 20.0         # total simulation time (adjust as needed)
-    N_eval = 2001        # number of time samples
+    # Basis B (covar_everything): [x1,x2,x3,x4,x5,x6,x7,x8,Q,P]
+    # Basis A (integration here): [Q,P,x1,x2,x3,x4,x5,x6,x7,x8]
+    perm_B2A = np.array([8, 9, 0, 1, 2, 3, 4, 5, 6, 7])  # x_A = x_B[perm_B2A]
+    perm_A2B = np.array([2, 3, 4, 5, 6, 7, 8, 9, 0, 1])  # x_B = x_A[perm_A2B]
+
+    def reorder_mat_B2A(M: np.ndarray) -> np.ndarray:
+        """Reorder 10x10 matrix from B-basis to A-basis."""
+        M = np.asarray(M)
+        return M[np.ix_(perm_B2A, perm_B2A)]
+
+    def reorder_cov_B2A(S: np.ndarray) -> np.ndarray:
+        """Reorder 10x10 covariance from B-basis to A-basis (Σ_A = Π Σ_B Πᵀ)."""
+        S = np.asarray(S)
+        return S[np.ix_(perm_B2A, perm_B2A)]
+
+    # ----- Initial means in A-basis (use your convert_state) ---------------------
+    # convert_state(y0_ket) from your code returns [Q,P,x1..x8]
+    x0_A = np.asarray(convert_state(y0_ket), dtype=complex)
+    x0_A = np.real_if_close(x0_A, tol=1e-12).astype(float)
+
+    # ----- Initial Sigma: your get_initial_covariance_matrix built it in B-basis --
+    # bring it to A-basis for consistent integration
+    Sigma0_B = np.array(Sigma0, dtype=float)  # from your earlier code
+    Sigma0_A = reorder_cov_B2A(0.5*(Sigma0_B + Sigma0_B.T))  # ensure symmetric
+
+    # ----- Helper: evaluate G(m),W(m) and reorder to A-basis ---------------------
+    def eval_G_W_A(xA: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Evaluate G,W at means in A-basis by:
+        1) map xA -> xB,
+        2) call g_func/w_func,
+        3) reorder matrices to A-basis.
+        """
+        mB = xA[perm_A2B]  # map to B-basis
+        GB = np.asarray(g_func(*mB), dtype=float).reshape(10, 10)
+        WB = np.asarray(w_func(*mB), dtype=float).reshape(10, 10)
+        GA = reorder_mat_B2A(GB)
+        WA = reorder_mat_B2A(WB)
+        return GA, WA
+
+    # ----- Pack/unpack upper triangular of Sigma (55 vars) -----------------------
+    _TRIU_IDX = np.triu_indices(10)
+
+    def pack_upper(S: np.ndarray) -> np.ndarray:
+        """Pack symmetric 10x10 matrix into upper-triangular vector (length 55)."""
+        return S[_TRIU_IDX]
+
+    def unpack_upper(v: np.ndarray) -> np.ndarray:
+        """Unpack upper-triangular vector (length 55) into symmetric 10x10 matrix."""
+        S = np.zeros((10, 10), dtype=float)
+        S[_TRIU_IDX] = v
+        S[(_TRIU_IDX[1], _TRIU_IDX[0])] = v
+        return S
+
+    # ----- Combined RHS in A-basis (means + packed Sigma) ------------------------
+    def rhs_combined_packed_A(t: float, y: np.ndarray) -> np.ndarray:
+        """
+        y = [ xA(10), sigma_up(55) ], where xA = [Q,P,x1..x8].
+        Means from your rhs_gellmann_qp_from_x; covariance via dΣ = GΣ + ΣGᵀ + W.
+        """
+        xA = y[:10]
+        sigma_up = y[10:]
+        SigmaA = unpack_upper(sigma_up)
+
+        # Means dynamics (use your correct RHS; enforce real)
+        dxA = np.real_if_close(rhs_gellmann_qp_from_x(t, xA, params), tol=1e-12)
+        dxA = np.asarray(dxA, dtype=float)
+
+        # Covariance dynamics with reordered G,W
+        GA, WA = eval_G_W_A(xA)
+        dSigmaA = GA @ SigmaA + SigmaA @ GA.T + WA
+        dSigmaA = 0.5 * (dSigmaA + dSigmaA.T)  # keep symmetry
+
+        return np.concatenate([dxA, pack_upper(dSigmaA)])
+
+    # ----- Time grid + integration (Radau for stiffness) -------------------------
+    print("Integration (Radau) startet ...")
+    T_end = 20.0 if 'T_end' not in globals() else T_end
+    N_eval = 2001 if 'N_eval' not in globals() else N_eval
     t_span = (0.0, T_end)
     t_eval = np.linspace(t_span[0], t_span[1], N_eval)
 
-    y0 = np.concatenate([x0, Sigma0.reshape(-1)])
-    sol = solve_ivp(rhs_combined, t_span, y0, t_eval=t_eval,
-                    method="RK45", rtol=1e-8, atol=1e-10)
+    y0_packed = np.concatenate([x0_A, pack_upper(Sigma0_A)])
 
+    sol = solve_ivp(rhs_combined_packed_A, t_span, y0_packed, t_eval=t_eval,
+                    method="Radau", rtol=1e-7, atol=1e-9)
+
+    print(f"Integration beendet. success={sol.success}, nfev={sol.nfev}, "
+        f"njev={getattr(sol,'njev','NA')}, nlu={getattr(sol,'nlu','NA')}")
     if not sol.success:
-        print("WARNUNG: Integration nicht erfolgreich:", sol.message)
-    else:
-        print("Integration erfolgreich abgeschlossen.")
+        print("WARNUNG:", sol.message)
 
-    # --- Unpack solution ------------------------------------------------------------
+    # ----- Unpack solution --------------------------------------------------------
     t = sol.t
-    X_t = sol.y[:10, :].T                                   # shape (N, 10)
-    Sigma_t = sol.y[10:, :].T.reshape(-1, 10, 10)           # shape (N, 10, 10)
-    # Enforce symmetry in outputs (guard against tiny drifts)
-    Sigma_t = 0.5 * (Sigma_t + np.transpose(Sigma_t, (0, 2, 1)))
+    X_t = sol.y[:10, :].T                       # shape (N,10), order [Q,P,x1..x8]
+    Sigma_t = np.empty((t.size, 10, 10), dtype=float)
+    sigma_up_over_time = sol.y[10:, :].T
+    for k in range(t.size):
+        S_k = unpack_upper(sigma_up_over_time[k])
+        Sigma_t[k] = 0.5 * (S_k + S_k.T)
 
-    # --- Symplectic matrix S (only for Q,P block at indices 8,9) -------------------
+    # ----- Symplectic matrix S (only Q,P at indices 0,1 in A-basis) --------------
     S = np.zeros((10, 10), dtype=float)
-    S[8, 9] = 1.0
-    S[9, 8] = -1.0
+    S[0, 1] =  1.0
+    S[1, 0] = -1.0
 
-    # --- Minimal eigenvalues over time ---------------------------------------------
+    # ----- Minimal eigenvalues over time -----------------------------------------
     lam_min_Sigma = np.empty_like(t)
     lam_min_Q     = np.empty_like(t)
-
     for k in range(t.size):
-        Sig = 0.5 * (Sigma_t[k] + Sigma_t[k].T)            # real-symmetric
+        Sig = Sigma_t[k]
         lam_min_Sigma[k] = np.min(np.linalg.eigvalsh(Sig))
-
-        Qmat = Sig + 0.5j * S                              # complex-Hermitian
-        # Numerical guard: eigvalsh returns real for Hermitian; take .real to be explicit.
+        Qmat = Sig + 0.5j * S
         lam_min_Q[k] = np.min(np.linalg.eigvalsh(Qmat)).real
 
     # ============================================================
     # PLOTTING
     # ============================================================
-    labels_x = [f"x{i}" for i in range(1, 9)] + ["Q", "P"]
 
-    # 1) Singlets (x1..x8,Q,P)
+    # 1) Singlets (Q,P,x1..x8) ----------------------------------------------------
+    labels_x = ["Q", "P"] + [f"x{i}" for i in range(1, 9)]
     plt.figure(figsize=(9, 5))
     for i in range(10):
         plt.plot(t, X_t[:, i], label=labels_x[i])
     plt.xlabel("Zeit")
     plt.ylabel("Mittelwerte")
-    plt.title("Singlets und Feld-Quadraturen über der Zeit")
+    plt.title("Singlets (Q, P, x1..x8) über der Zeit")
     plt.legend(ncol=2, fontsize=8, frameon=False)
     plt.tight_layout()
 
-    # 2) Alle Kovarianzmatrix-Elemente
+    # 2) Alle Kovarianzmatrix-Elemente --------------------------------------------
     plt.figure(figsize=(9, 5))
     for i in range(10):
         for j in range(10):
-            # Diagonalen deutlich, Off-Diagonalen transparent
             lw = 1.5 if i == j else 0.8
             alpha = 1.0 if i == j else 0.15
-            # Nur Diagonale beschriften, um Legendenflut zu vermeiden
             lbl = rf"$\Sigma_{{{i+1},{j+1}}}$" if i == j else None
             plt.plot(t, Sigma_t[:, i, j], label=lbl, linewidth=lw, alpha=alpha)
     plt.xlabel("Zeit")
@@ -315,91 +396,37 @@ if __name__ == "__main__":
     plt.legend(fontsize=8, frameon=False)
     plt.tight_layout()
 
-    # 3) Minimale Eigenwerte: Σ und Σ + i/2 S
+    # 3) Minimaler Eigenwert von Σ und Σ + i/2 S ----------------------------------
     plt.figure(figsize=(9, 5))
     plt.plot(t, lam_min_Sigma, label=r"$\lambda_{\min}(\Sigma)$", linewidth=1.8)
     plt.plot(t, lam_min_Q,     label=r"$\lambda_{\min}(\Sigma + 0.5i S)$", linewidth=1.8)
     plt.axhline(0.0, linestyle="--", linewidth=1.0)
     plt.xlabel("Zeit")
     plt.ylabel("Minimaler Eigenwert")
-    plt.title("Minimaler Eigenwert von Σ und Σ + i/2 S über der Zeit")
+    plt.title("Minimaler Eigenwert von Σ und Σ + i/2 S")
     plt.legend(frameon=False)
     plt.tight_layout()
 
-    plt.show()
-    
-    # ============================================================
-    # 4) Populations rho00, rho11, rho22 aus Gell-Mann-Matrizen + Plot
-    #     (füge diesen Block nach der Integration ein; t und X_t werden verwendet)
-    # ============================================================
-
-    print("4. Populations werden aus den Gell-Mann-Matrizen rekonstruiert und geplottet...")
-
-    # -- Predefine Gell-Mann matrices (3x3) once ------------------
-    l1 = np.array([[0,1,0],[1,0,0],[0,0,0]],complex)
-    l2 = np.array([[0,-1j,0],[1j,0,0],[0,0,0]],complex)
-    l3 = np.array([[1,0,0],[0,-1,0],[0,0,0]],complex)
-    l4 = np.array([[0,0,1],[0,0,0],[1,0,0]],complex)
-    l5 = np.array([[0,0,-1j],[0,0,0],[1j,0,0]],complex)
-    l6 = np.array([[0,0,0],[0,0,1],[0,1,0]],complex)
-    l7 = np.array([[0,0,0],[0,0,-1j],[0,1j,0]],complex)
-    l8 = (1/np.sqrt(3))*np.array([[1,0,0],[0,1,0],[0,0,-2]],complex)
-    LAMBDAS = [l1,l2,l3,l4,l5,l6,l7,l8]
-
-    def populations_from_x_with_lambdas(x8_vec: np.ndarray) -> Tuple[float, float, float]:
-        """
-        Reconstruct populations from Gell-Mann expansion:
-        rho = I/3 + 1/2 * sum_{a=1}^8 x_a * lambda_a
-        Input: x8_vec = [x1,..,x8] (shape (8,))
-        Returns: (rho00, rho11, rho22) as floats
-        """
-        rho = (np.eye(3, dtype=complex) / 3.0)
-        for a in range(8):
-            xa = float(np.real_if_close(x8_vec[a], tol=1e-12))  # means are real
-            rho = rho + 0.5 * xa * LAMBDAS[a]
-        # Take real parts of diagonal (Hermitian by construction)
-        return rho[0,0].real, rho[1,1].real, rho[2,2].real
-
-    # Vectorized over time (loop is fine for N~1e3-1e4)
-    N = t.size
-    rho00 = np.empty(N)
-    rho11 = np.empty(N)
-    rho22 = np.empty(N)
-    for k in range(N):
-        # X_t[k, :8] holds [x1..x8]
-        r00, r11, r22 = populations_from_x_with_lambdas(X_t[k, :8])
-        rho00[k], rho11[k], rho22[k] = r00, r11, r22
-
+    # 4) Populations ρ00, ρ11, ρ22 + Summe ----------------------------------------
+    # From x3 and x8 in A-basis: x3 = X_t[:, 2+2], x8 = X_t[:, 2+7]
+    x3 = X_t[:, 4]   # positions: [Q(0),P(1),x1(2),x2(3),x3(4),...,x8(9)]
+    x8 = X_t[:, 9]
+    rho00 = 1/3 + 0.5*( x3 + x8/np.sqrt(3) )
+    rho11 = 1/3 + 0.5*( -x3 + x8/np.sqrt(3) )
+    rho22 = 1.0 - rho00 - rho11
     rho_sum = rho00 + rho11 + rho22
 
-    # Optional: also compute via closed-form formulas for a quick internal consistency check
-    x3 = X_t[:, 2]
-    x8 = X_t[:, 7]
-    rho00_formula = 1/3 + 0.5*( x3 + x8/np.sqrt(3) )
-    rho11_formula = 1/3 + 0.5*( -x3 + x8/np.sqrt(3) )
-    rho22_formula = 1.0 - rho00_formula - rho11_formula
-    max_dev = np.max(np.abs(rho00 - rho00_formula)) + np.max(np.abs(rho11 - rho11_formula)) + np.max(np.abs(rho22 - rho22_formula))
-    print(f"   Konsistenz-Check (Formel vs. Lambda-Rekonstruktion), max. Abweichung: {max_dev:.3e}")
-
-    # Sanity checks for probability simplex
-    min_val = min(rho00.min(), rho11.min(), rho22.min())
-    max_val = max(rho00.max(), rho11.max(), rho22.max())
-    sum_dev = np.max(np.abs(rho_sum - 1.0))
-    print(f"   Wertebereich Populations: min={min_val:.6f}, max={max_val:.6f}, max|rho00+rho11+rho22-1|={sum_dev:.3e}")
-
-    # -- Plot populations and their sum -------------------------------------------
     plt.figure(figsize=(9, 5))
-    plt.plot(t, rho00, label=r"$\rho_{00}$")
-    plt.plot(t, rho11, label=r"$\rho_{11}$")
-    plt.plot(t, rho22, label=r"$\rho_{22}$")
-    plt.plot(t, rho_sum, label=r"$\rho_{00}+\rho_{11}+\rho_{22}$", linestyle="--", linewidth=1.2)
-    plt.axhline(1.0, linestyle=":", linewidth=1.0)  # visual guide for normalization
+    plt.plot(t, rho00.real, label=r"$\rho_{00}$")
+    plt.plot(t, rho11.real, label=r"$\rho_{11}$")
+    plt.plot(t, rho22.real, label=r"$\rho_{22}$")
+    plt.plot(t, rho_sum.real, "--", label=r"$\rho_{00}+\rho_{11}+\rho_{22}$", linewidth=1.2)
+    plt.axhline(1.0, linestyle=":", linewidth=1.0)
     plt.xlabel("Zeit")
     plt.ylabel("Populationen")
-    plt.title(r"Rekonstruierte Populations $\rho_{00},\rho_{11},\rho_{22}$ und Summe")
+    plt.title(r"Populations $\rho_{00},\rho_{11},\rho_{22}$ und Summe")
     plt.legend(frameon=False, ncol=2)
     plt.tight_layout()
 
     plt.show()
-    print("Populations-Plot fertig.")
-    print("Plots fertig.")
+    print("Alle Plots fertig.")
