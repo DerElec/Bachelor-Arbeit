@@ -163,16 +163,6 @@ def run_all():
     f_sym = lambda a,b,c: f_arr[a-1][b-1][c-1] if 1<=a<=8 and 1<=b<=8 and 1<=c<=8 else 0
 
 
-    def check_half_MM_T_real(M):
-        """
-        Return (ok, ImPart) where ok=True iff (M*M.T)/2 has zero imaginary part.
-        """
-        S = (M * M.T) / 2
-        ImS = S.applyfunc(lambda x: sp.simplify(sp.im(x)))
-        ok = all(el == 0 for el in ImS)  # element-wise test
-        return ok, ImS
-    
-
 
 
 
@@ -211,88 +201,70 @@ def run_all():
     # -----------------------------
 
 
-    # --- Symbols (keep same names as in your code) ---
     Delta1, Delta2, Omega = sp.symbols('Delta1 Delta2 Omega', real=True)
-    V_const, eta, g0   = sp.symbols('V eta g0', real=True)
-    # Singles m1..m10 (1..8 = SU(3); 9 = q; 10 = p)
-    mP = sp.symbols('m1:11')
+    V_const, eta, g0 = sp.symbols('V eta g0', real=True)
+    mP = sp.symbols('m1:11')  # m1..m10 (1..8 SU(3); 9=q; 10=p)
 
-    # You must provide f_sym(i,a,G) elsewhere (unchanged).
     def f_P(i, a, G):
-        """Return f_{i a G} for SU(3) part, else 0 (keeps your old contract)."""
+        """Return f_{i a G} for SU(3) indices; else 0."""
         if 1 <= i <= 8 and 1 <= a <= 8 and 1 <= G <= 8:
-            return f_sym(i, a, G)
+            return f_sym(i, a, G)  # must use Tr(λa λb)=2 δab normalization
         return 0
 
-    # --- Linear coefficients ω_i from corrected H_N ---
-    # ω_3 = -Δ1/2 ; ω_6 = +Ω/2 ; ω_8 = (Δ1/2 - Δ2 - 2V/3)/√3 ; ω_10 = 2√N η
+    # --- Linear coefficients (consistent with your H_N and √2 choice) ---
     omega = {i: sp.Integer(0) for i in range(1, 11)}
     omega[3]  = -Delta1/2
     omega[6]  =  Omega/2
     omega[8]  = (Delta1/2 - Delta2 - 2*V_const/3) / sp.sqrt(3)
-    omega[10] =  sp.sqrt(2)*eta  # belasse √N, wie du es vorher genutzt hast
+    omega[10] =  sp.sqrt(2)*eta   # implies qdot gets +√2 η (inhom. term, not in P)
 
-    # --- Quadratic couplings h_{μν} (symmetric), with γ absorbed in g0 ---
-    # Convention: H_ia = (ħ/N) * sum_{μν} h_{μν} m_μ m_ν
+    # --- Quadratic couplings h_{μν} (symmetric) ---
+    # H_ia = (ħ/N) * sum_{μν} h_{μν} m_μ m_ν
     h = {}
     def set_h(mu, nu, val):
-        h[(mu, nu)] = val
-        h[(nu, mu)] = val
+        h[(mu, nu)] = val/2
+        h[(nu, mu)] = val/2
 
-    # Light–matter: g0 (m1*q + m2*p)  -> note: plus for m2*p with your q,p def
-    set_h(1, 9,  g0/(2*sp.sqrt(2)))
-    
-    set_h(2, 10, g0/(2*sp.sqrt(2)))
+    # Light–matter with your √2 convention in H_N:
+    set_h(1, 9,  g0/(sp.sqrt(2)))
+    set_h(2, 10, g0/(sp.sqrt(2)))
 
-    # V-term quadratic piece: (V/3) m8^2
-    set_h(8, 8, 2*V_const/3)
+    # V term: use the PHYSICAL value (V/3); we will include BOTH sums in P.
+    set_h(8, 8, V_const/3)
 
-    # --- Build symbolic P(m; params) ---
     def build_P_sym():
         P = sp.zeros(10, 10)
 
-        # (1) Linear H0 contribution: P^{(0)}_{aG} = sum_i ω_i f_{i a G}
-        for a in range(1, 11):
-            for G in range(1, 11):
-                if a <= 8 and G <= 8:
-                    P[a-1, G-1] += -sum(2*omega[i] * f_P(i, a, G) for i in (3, 6, 8)) # ä#ääääääääääääääääääääääääääääänderung   <----------------------------
-                # (bosonic rows a=9,10: no f-contribution from H0)
+        # (1) Linear SU(3) part from omega_i λ_i
+        for a in range(1, 9):      # SU(3) rows
+            for G in range(1, 9):  # SU(3) cols
+                s = 0
+                #print(print(6,6))
+                for i in (3, 6, 8):  # only those ω_i that are nonzero
+                    s += -2 * omega[i] * f_P(i, a, G)
+                P[a-1, G-1] += s
 
-        # (2) Bilinear H_ia contribution:
-        #     P^{(ia)}_{aG} = (2/N) * sum_{μ,ν} h_{μν} * m_μ * f_{ν a G}    (ν<=8)
-        #                   + (2/N) * sum_{ν} h_{Gν} * sum_c f_{ν a c} m_c  (only for G=9,10)
-        for a in range(1, 11):
-            for G in range(1, 11):
-                # First term: atomic columns G<=8
-                if a <= 8 and G <= 8:
-                    s = 0
-                    for (mu, nu), hval in h.items():
-                        if 1 <= nu <= 8:
-                            s += hval * mP[mu-1] * f_P(nu, a, G)  #ääääääääääääääääääääääääääääänderung  <----------------------------
-                    P[a-1, G-1] +=  -2*s
+        # (2) Bilinear part from h_{μν} m_μ m_ν
+        for a in range(1, 9):
+            for G in range(1, 9):
+                s = 0
+                for (mu, nu), hval in h.items():
+                    # both symmetric terms must be counted
+                    term1 = hval * mP[nu-1] * (f_P(mu, a, G) if mu <= 8 else 0)
+                    term2 = hval * mP[mu-1] * (f_P(nu, a, G) if nu <= 8 else 0)
+                    s += term1 + term2
+                if s != 0:
+                    P[a-1, G-1] += -2 * s
 
-                # Second term: bosonic columns (G=9,10)
-                if a <= 8 and G in (9, 10):
-                    s = 0
-                    for nu in range(1, 9):
-                        hGnu = h.get((G, nu), 0)
-                        if hGnu != 0:
-                            s += hGnu * sum(f_P(nu, a, c) * mP[c-1] for c in range(1, 9))
-                    if s != 0:
-                        P[a-1, G-1] +=  -2*s
-
-        # (3) Bosonic rows from canonical equations:
-        #     qdot = + g0 * m2 + 2N*eta     -> P[9,2]  = + g0  (inhom. 2N*eta not in P)
-        #     pdot = - g0 * m1              -> P[10,1] = - g0
-        P[9-1,  2-1] +=  g0/(sp.sqrt(2))
-        P[10-1, 1-1] += -g0/(sp.sqrt(2))
+        # (3) Coupling of SU(3) to bosons (q=9, p=10)
+        # qdot = (g0/√2) m2 + √2 η   -> P[9,2] = g0/√2
+        # pdot = -(g0/√2) m1        -> P[10,1] = -g0/√2
+        P[9-1,  2-1] +=  g0/sp.sqrt(2)
+        P[10-1, 1-1] += -g0/sp.sqrt(2)
 
         return sp.simplify(P)
 
-   
-
-    P=build_P_sym()
-    P = sp.simplify(P)
+    P = build_P_sym()
     #sp.pprint(P)
     print("P-Matrix (symbolisch) aufgebaut.")
     # -----------------------------
@@ -371,7 +343,7 @@ def run_all():
         return Zp
 
 
-    G = P + sE + Q.T#P + sE + Q
+    G = P + sE + Q#P + sE + Q
 
     Z_prime=compute_Z_prime_new()
     Z=sp.simplify((Z_prime+Z_prime.T)/2)

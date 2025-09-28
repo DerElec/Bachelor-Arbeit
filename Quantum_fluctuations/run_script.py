@@ -40,14 +40,20 @@ def rhs_gellmann_qp_from_ket(t, y, params):
 # -------------------------------------------------------------------
 def convert_state(y):
     """
-    If len(y)==11, project to 10-vector [Q,P,x1..x8].
-    If len(y)==10, reconstruct to 11-vector [a,ad,ρ00,ρ01,ρ10,ρ11,ρ22,ρ21,ρ12,ρ20,ρ02].
+    If len(y)==11, project to 10-vector [Q, P, x1..x8].
+    If len(y)==10, reconstruct to 11-vector [a, ad, ρ00, ρ01, ρ10, ρ11, ρ22, ρ21, ρ12, ρ20, ρ02].
+    Conventions:
+      ρ = (1/3) I + (1/2) sum_a x_a λ_a  with Tr(λ_a λ_b) = 2 δ_ab,
+      Q = (a + a†)/√2,  P = (a - a†)/(i√2).
     """
+    y = np.asarray(y, dtype=complex)
+
     if len(y) == 11:
         # full → projected
         a, ad = y[0], y[1]
-        rho00, rho01, rho10, rho11, rho22, rho21, rho12, rho02, rho20 = y[2], y[3], y[4], y[5], y[6], y[7], y[8], y[10], y[9]
-        # Gell-Mann x's
+        rho00, rho01, rho10, rho11, rho22, rho21, rho12, rho20, rho02 = y[2], y[3], y[4], y[5], y[6], y[7], y[8], y[9], y[10]
+
+        # Gell-Mann components (x = Tr[ρ λ])
         x1 = rho01 + rho10
         x2 = -1j*(rho01 - rho10)
         x3 = rho00 - rho11
@@ -56,27 +62,35 @@ def convert_state(y):
         x6 = rho12 + rho21
         x7 = -1j*(rho12 - rho21)
         x8 = (rho00 + rho11 - 2*rho22)/np.sqrt(3)
-        # quadratures
+
+        # Quadratures
         Q = (a + ad)/np.sqrt(2)
         P = (a - ad)/(1j*np.sqrt(2))
+
         return np.array([Q, P, x1, x2, x3, x4, x5, x6, x7, x8], dtype=complex)
 
     elif len(y) == 10:
         # projected → full
         Q, P = y[0], y[1]
         x1, x2, x3, x4, x5, x6, x7, x8 = y[2:]
-        # ladder
+
+        # Ladder operators (algebraic inverse; do NOT use conj)
         a  = (Q + 1j*P)/np.sqrt(2)
-        ad = np.conj(a)
-        # density diag
+        ad = (Q - 1j*P)/np.sqrt(2)
+
+        # Diagonals from ρ = 1/3 I + 1/2 Σ x_a λ_a
         rho00 = 1/3 + 0.5*( x3 + x8/np.sqrt(3) )
         rho11 = 1/3 + 0.5*(-x3 + x8/np.sqrt(3))
-        rho22 = 1 - rho00 - rho11
-        # off-diags
+        rho22 = 1 - rho00 - rho11  # = 1/3 - x8/√3
+
+        # Off-diagonals
         rho01 = (x1 + 1j*x2)/2
+        rho10 = (x1 - 1j*x2)/2
         rho02 = (x4 + 1j*x5)/2
+        rho20 = (x4 - 1j*x5)/2
         rho12 = (x6 + 1j*x7)/2
-        rho10, rho20, rho21 = np.conj(rho01), np.conj(rho02), np.conj(rho12)
+        rho21 = (x6 - 1j*x7)/2
+
         return np.array([a, ad, rho00, rho01, rho10, rho11, rho22, rho21, rho12, rho20, rho02], dtype=complex)
 
     else:
@@ -108,35 +122,6 @@ def rhs_gellmann_qp_from_x(t, x, params):
     dQ = (da_dt + da_dagger_dt)/np.sqrt(2)
     dP = (da_dt - da_dagger_dt)/(1j*np.sqrt(2))
     return np.array([dQ, dP, dx1, dx2, dx3, dx4, dx5, dx6, dx7, dx8], dtype=complex)
-
-
-
-# Covariance matrix DGl
-def rhs_gellmann_qp_from_x(t, x, params):
-    """Compute d[Q,P,x1..x8]/dt by converting to ket, calling rhs, then projecting."""
-    # reconstruct full ket-vector
-    y_full = convert_state(x)
-    # compute dy/dt in ket
-    dy = rhs_gellmann_qp_from_ket(t, y_full, params)
-    # unpack
-    da_dt, da_dagger_dt = dy[0], dy[1]
-    d00, d01, d10, d11 = dy[2], dy[3], dy[4], dy[5]
-    d22, d21, d12, d20, d02 = dy[6], dy[7], dy[8], dy[9], dy[10]
-    # compute dx's
-    dx1 =  d01 + d10
-    dx2 = -1j*d01 + 1j*d10
-    dx3 =  d00 - d11
-    dx4 =  d02 + d20
-    dx5 = -1j*d02 + 1j*d20
-    dx6 =  d12 + d21
-    dx7 = -1j*d12 + 1j*d21
-    dx8 = (d00 + d11 - 2*d22)/np.sqrt(3)
-    # quadrature derivatives
-    dQ = (da_dt + da_dagger_dt)/np.sqrt(2)
-    dP = (da_dt - da_dagger_dt)/(1j*np.sqrt(2))
-    return np.array([dQ, dP, dx1, dx2, dx3, dx4, dx5, dx6, dx7, dx8], dtype=complex)
-
-
 
 
 # -------------------------------------------------------------------
