@@ -1,7 +1,8 @@
 from sympy import symbols, I, Matrix, zeros, sqrt, simplify
 from itertools import permutations
 import numpy as np
-
+import sympy as sp
+sp.init_printing(use_unicode=True, wrap_line=False, num_columns=10**6)
 def get_S_matrix_gellman(v=None):
 
     lambda_syms = symbols('lambda1:9')

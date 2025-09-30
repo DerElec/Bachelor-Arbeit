@@ -12,6 +12,7 @@ import covar_everything as covar
 
 import numpy as np
 
+sp.init_printing(use_unicode=True, wrap_line=False)#, num_columns=200)
 
 # Python code (comments in English; console/output in German)
 
@@ -292,15 +293,36 @@ if __name__ == "__main__":
     # 1. SETUP: Parameter und Anfangsbedingungen
     print("1. System wird eingerichtet...")
     g0, Delta1, Delta2, V, Gamma, Omega, kappa, eta = sp.symbols("g0 Delta1 Delta2 V Gamma Omega kappa eta")
-    Omega_val = 0#8.0  # laser drive 1->2
-    Gamma_val = 2.0    #atom decay 1->0
-    V_val = 0#-6.0  #interaction potential
+    Omega_val = 6#8.0  # laser drive 1->2
+    Gamma_val = 2  #atom decay 1->0
+    
     Delta1_val=1  #detuning from 1 
     Delta2_val=1 #detuning from 2
     #############
-    g0_val=1 #cavity coupling 
-    eta_val=0 # cavity drive 
+    g0_val=1 #cavity coupling s
+    eta_val=1 # cavity drive 
     kappa_val=1 #cavity decay
+    #V_val =-Delta2/2*((Omega_val*kappa_val/(4*eta_val*g0))**2+1)
+    #V_val =-1/2*(4+1)
+    V_val =-6  #interaction potential
+    
+
+    t_span = (0.0, 50.0)
+    rtol_val=1e-12
+    atol_val=1e-14
+    y0_ket = np.array([0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    #y0_ket = np.array([0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
+    m0 = convert_state(y0_ket)
+    Sigma0 = get_initial_covariance_matrix(y0_ket)
+
+
+
+
+
+
+
+
+
     numeric_params = { 
         g0:     g0_val, Delta1: Delta1_val, Delta2: Delta2_val, V: V_val, Gamma: Gamma_val, 
         Omega: Omega_val, kappa:   kappa_val, eta: eta_val
@@ -310,11 +332,6 @@ if __name__ == "__main__":
         'Omega': Omega_val, 'delta1': Delta1_val, 'delta2':Delta2_val,
         'eta': eta_val, 'V': V_val
     }
-    
-    y0_ket = np.array([10+0j, 0+0j, 1+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j, 0+0j])
-    m0 = convert_state(y0_ket)
-    Sigma0 = get_initial_covariance_matrix(y0_ket)
-
     # 2. SYMBOLIK: Umwandlung in schnelle numerische Funktionen
     print("2. Symbolische Matrizen werden in numerische Funktionen umgewandelt...")
     m_syms = sp.symbols('m1:11')
@@ -352,12 +369,12 @@ if __name__ == "__main__":
    # 4. LÖSEN
     if solve:
         print("3. Differentialgleichungssystem wird gelöst...")
-        t_span = (0.0, 80.0)
+        
         t_eval = np.linspace(*t_span, 1001)
         Y0 = np.concatenate([np.real(m0), Sigma0.flatten()])
         sol = solve_ivp(
             fun=lambda t, y: rhs_combined(t, y, params, g_func, w_func),
-            t_span=t_span, y0=Y0, t_eval=t_eval, method='RK45'
+            t_span=t_span, y0=Y0, t_eval=t_eval, method='RK45',rtol=rtol_val,atol=atol_val
         )
         print("Lösung erfolgreich berechnet.")
 
@@ -381,7 +398,7 @@ if __name__ == "__main__":
             # NEU: Größter Realteil der Eigenwerte von G(t)
             G_t = g_func(*m_reordered)
             eigenvalues_G = np.linalg.eigvals(G_t) # G ist nicht symmetrisch -> eigvals
-            max_real_eigenvalues_G.append(np.max(np.real(eigenvalues_G)))
+            #max_real_eigenvalues_G.append(np.max(np.real(eigenvalues_G)))
 
         # --- Berechnung für M(t) und Sigma(t) ---
         #s_timeseries = build_symplectic_matrix_ts(sol)
@@ -397,13 +414,83 @@ if __name__ == "__main__":
             min_eigenvalue_trajectory_M.append(np.min(np.linalg.eigvalsh(M_t)))
         
         # --- Kombinierter Plot für alle vier Verläufe ---
+        def compute_G_W_spectra(sol, g_func, w_func):
+            """Return per-time-step spectra: eigvals(G_t) and eigvalsh(W_t)."""
+            G_eigs_all = []   # list of arrays (complex) for each t
+            W_eigs_all = []   # list of arrays (real, sorted) for each t
+
+            for i in range(len(sol.t)):
+                m_t = sol.y[:10, i]
+                # reorder: your G/W expect [λ1..λ8, Q, P] i.e. m[2:] + m[:2]
+                m_reordered = np.concatenate([m_t[2:], m_t[:2]])
+
+                G_t = g_func(*m_reordered)
+                W_t = w_func(*m_reordered)
+
+                # G is generally non-symmetric: use eigvals (complex)
+                G_eigs = np.linalg.eigvals(G_t)
+                # W is symmetric (diffusion): use eigvalsh (real, sorted)
+                W_eigs = np.linalg.eigvalsh(W_t)
+
+                G_eigs_all.append(G_eigs)
+                W_eigs_all.append(W_eigs)
+
+            return G_eigs_all, W_eigs_all
+
+        # ... inside your `if solve:` block, AFTER `sol = solve_ivp(...)` and BEFORE plotting:
+
+        # 4a) Compute time series of spectra
+        G_eigs_all, W_eigs_all = compute_G_W_spectra(sol, g_func, w_func)
+
+        # 4b) Build the requested trajectories:
+        #     - max real part among eigenvalues of G(t)
+        #     - min eigenvalue of W(t)
+        max_real_eigs_G_over_time = [np.max(np.real(ev)) for ev in G_eigs_all]
+        min_eigs_W_over_time      = [np.min(ev) for ev in W_eigs_all]
+
+        # 4c) Print summary stats (German console output)
+        idx_max_G   = int(np.argmax(max_real_eigs_G_over_time))
+        idx_min_W   = int(np.argmin(min_eigs_W_over_time))
+
+       # --- Berechnung für G(t) und W(t) ---
+        min_eigenvalues_W = []
+        max_real_eigenvalues_G = []
+
+        for i in range(len(sol.t)):
+            m_t = sol.y[:10, i]
+            m_reordered = np.concatenate([m_t[2:], m_t[:2]])
+
+            # W ist hermitesch → eigvalsh
+            W_t = w_func(*m_reordered)
+            min_eigenvalues_W.append(np.min(np.linalg.eigvalsh(W_t)).real)
+
+            # G ist i.A. nicht hermitesch → eigvals, dann Realteil
+            G_t = g_func(*m_reordered)
+            eigenvalues_G = np.linalg.eigvals(G_t)
+            max_real_eigenvalues_G.append(np.max(np.real(eigenvalues_G)))
+
+        # --- Berechnung für M(t) und Sigma(t) ---
+        s_timeseries = build_s_form_timeseries_2f(sol)
+        min_eigenvalue_trajectory_M = []
+        min_eigenvalues_Sigma = []
+
+        for i in range(len(sol.t)):
+            sigma_t = sol.y[10:, i].reshape((10, 10))
+            min_eigenvalues_Sigma.append(np.min(np.linalg.eigvalsh(sigma_t)))
+            s_t = s_timeseries[i]
+            M_t = sigma_t + (1j / 2) * s_t
+            min_eigenvalue_trajectory_M.append(np.min(np.linalg.eigvalsh(M_t)))
+
+        # --- Kombinierter Plot für alle vier Verläufe ---
         print("5. Erstelle kombinierten Plot...")
         plt.figure(figsize=(14, 8))
-        
-        plt.plot(sol.t, max_real_eigenvalues_G, label='Größter Realteil Eig(G(t)) (Stabilität)', color='green', linestyle='-.') # NEUER PLOT
+
+        # Hier jetzt auch G und W mitplotten:
+        plt.plot(sol.t, max_real_eigenvalues_G, label='Größter Realteil Eig(G(t))', color='green', linestyle='-.')
         plt.plot(sol.t, min_eigenvalues_W, label='Kleinster Eig(W(t))', color='darkcyan', linestyle='--')
+
         plt.plot(sol.t, min_eigenvalues_Sigma, label=r'Kleinster Eig($\Sigma(t)$)', color='orange')
-        plt.plot(sol.t, min_eigenvalue_trajectory_M, label=r'Kleinster Eig(M(t) = $\Sigma + \frac{i}{2}s$)', color='purple', linewidth=2)
+        plt.plot(sol.t, min_eigenvalue_trajectory_M, label=r'Kleinster Eig(M(t) = $\Sigma + 0.5is$)', color='purple', linewidth=2)
 
         plt.axhline(0, color='red', linestyle=':', linewidth=2, label='Referenzlinie (y=0)')
         plt.title('Zeitentwicklung der relevanten Eigenwerte')
@@ -413,7 +500,6 @@ if __name__ == "__main__":
         plt.legend()
         plt.tight_layout()
         plt.show()
-
         # ========================================================================
         # 6. WEITERE PLOTS (unverändert)
         # ========================================================================
@@ -459,7 +545,7 @@ if __name__ == "__main__":
         plt.ylabel('Population')
         plt.legend()
         plt.grid(True)
-        #plt.show()
+        plt.show()
 
         # print("\n\n" + "="*70)
         # print("DETAILLIERTE MATRIX-ANALYSE FÜR EINEN ZEITPUNKT")

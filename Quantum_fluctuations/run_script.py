@@ -145,9 +145,9 @@ def rhs_gellmann_qp_from_x(t, x, params):
 if __name__ == '__main__':
     # define parameters
     params = dict(
-        kappa=1.0, gamma=1.0, Gamma=1.0,
+        kappa=1.0, gamma=1.0, Gamma=2.0,
         Omega=8.0, delta1=1.0, delta2=1.0,
-        eta=1.0, V=-8.0
+        eta=1.0, V=-1/2*((8/4)**2+1)
     )
 
     # time span

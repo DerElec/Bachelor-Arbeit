@@ -1,5 +1,6 @@
 import sympy as sp
 import numpy as np
+from collections import defaultdict
 def run_all():
     # -----------------------------
     # Symbolische Konstanten
@@ -234,20 +235,29 @@ def run_all():
 
     # --- Quadratic couplings h_{μν} (symmetric), with γ absorbed in g0 ---
     # Convention: H_ia = (ħ/N) * sum_{μν} h_{μν} m_μ m_ν
-    h = {}
+    h= defaultdict(int)
+    #h = {}
     def set_h(mu, nu, val):
         h[(mu, nu)] = val
         h[(nu, mu)] = val
+    
 
     # Light–matter: g0 (m1*q + m2*p)  -> note: plus for m2*p with your q,p def
-    set_h(1, 9,  g0/(2*sp.sqrt(2)))
+    set_h(1, 9,  g0/(sp.sqrt(2)))
     
-    set_h(2, 10, g0/(2*sp.sqrt(2)))
+    set_h(2, 10, g0/(sp.sqrt(2)))
 
     # V-term quadratic piece: (V/3) m8^2
     set_h(8, 8, 2*V_const/3)
 
     # --- Build symbolic P(m; params) ---
+    def qp_scalar(alpha, idx):
+        if alpha == 10 and idx == 9:   # i[Q,P] = -c_qp
+            return -1
+        if alpha == 9 and idx == 10:   # i[P,Q] = +c_qp
+            return +1
+        return 0.0
+    
     def build_P_sym():
         P = sp.zeros(10, 10)
 
@@ -261,25 +271,62 @@ def run_all():
         # (2) Bilinear H_ia contribution:
         #     P^{(ia)}_{aG} = (2/N) * sum_{μ,ν} h_{μν} * m_μ * f_{ν a G}    (ν<=8)
         #                   + (2/N) * sum_{ν} h_{Gν} * sum_c f_{ν a c} m_c  (only for G=9,10)
-        for a in range(1, 11):
-            for G in range(1, 11):
-                # First term: atomic columns G<=8
-                if a <= 8 and G <= 8:
-                    s = 0
-                    for (mu, nu), hval in h.items():
-                        if 1 <= nu <= 8:
-                            s += hval * mP[mu-1] * f_P(nu, a, G)  #ääääääääääääääääääääääääääääänderung  <----------------------------
-                    P[a-1, G-1] +=  -2*s
+        # for a in range(1, 11):
+        #     for G in range(1, 11):
+        #         # First term: atomic columns G<=8
+        #         if a <= 8 and G <= 8:
+        #             s = 0
+        #             for (mu, nu), hval in h.items():
+        #                 if 1 <= nu <= 8:
+        #                     s += hval * mP[mu-1] * f_P(nu, a, G)  #ääääääääääääääääääääääääääääänderung  <----------------------------
+        #             P[a-1, G-1] +=  -2*s
 
-                # Second term: bosonic columns (G=9,10)
-                if a <= 8 and G in (9, 10):
-                    s = 0
-                    for nu in range(1, 9):
-                        hGnu = h.get((G, nu), 0)
-                        if hGnu != 0:
-                            s += hGnu * sum(f_P(nu, a, c) * mP[c-1] for c in range(1, 9))
-                    if s != 0:
-                        P[a-1, G-1] +=  -2*s
+        #         # Second term: bosonic columns (G=9,10)
+        #         if a <= 8 and G in (9, 10):
+        #             s = 0
+        #             for nu in range(1, 9):
+        #                 hGnu = h.get((G, nu), 0)
+        #                 if hGnu != 0:
+        #                     s += hGnu * sum(f_P(nu, a, c) * mP[c-1] for c in range(1, 9))
+        #             if s != 0:
+        #                 P[a-1, G-1] +=  -2*s
+
+        for alpha in range(1,11):
+            for gamma in range(1,9):
+                for nu in range(1,11):
+                    for mu in range(1,11):
+                        term=0
+                        #first term m_mu [m_nu,F_alpha] 
+                        if 1<= alpha<=8 and 1<= nu<=8:
+                            term+=-2*h[(mu,nu)]*mP[mu-1]*f_P(nu,alpha,gamma)
+                            P[alpha-1,gamma-1]+=term
+
+
+
+                        # if nu==9 and alpha==10:
+                        #     term=0
+                        #     term+=-h[(mu,nu)]
+                        #     P[alpha-1,mu-1]+=term
+                        # if nu==10 and alpha==9:
+                        #     term=0
+                        #     term+=h[(mu,nu)]
+                        #     P[alpha-1,mu-1]+=term
+                        #second term  [m_mu,F_alpha] F_nu
+                        if 1<= mu<=8 and 1<= alpha<=8:
+                            term=0
+                            term+=-2*h[(mu,nu)]*mP[gamma-1]*f_P(mu,alpha,gamma)
+                            P[alpha-1,nu-1]+=term
+                        # if mu==9 and alpha==10:
+                        #     term=0
+                        #     term=-h[(mu,nu)]
+                        #     P[alpha-1,nu-1]+=term
+                        # if mu==10 and alpha==9:
+                        #     term=0
+                        #     term=+h[(mu,nu)]
+                        #     P[alpha-1,nu-1]+=term
+
+
+
 
         # (3) Bosonic rows from canonical equations:
         #     qdot = + g0 * m2 + 2N*eta     -> P[9,2]  = + g0  (inhom. 2N*eta not in P)
