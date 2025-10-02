@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "python-envs.defaultEnvManager": "ms-python.python:conda",
   "python-envs.defaultPackageManager": "ms-python.python:conda",
   "python-envs.pythonProjects": [],
@@ -10,3 +11,14 @@
     "PYTHONIOENCODING": "utf-8"
   }
 }
+=======
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": [],
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.env.windows": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8"
+    }
+}
+>>>>>>> cbdb692be6a260fa45f35a3073f8f31d2e3df0c9
